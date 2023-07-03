@@ -20,6 +20,10 @@ To run the script, pass one or more GPX file paths as command-line arguments:
 ```bash
 python main.py data/track1.gpx data/track2.gpx
 ```
+### Additional parameters:
+* `--start` or `-s`: start time in the format `2023-06-30T10:53:00+0200`, all points before that will not be plotted
+* `--names` or `-n`: names of the participants (otherwise the file names will be used in the legend)
+
 
 ## Marks
 The script also supports visualizing predefined marks on the map, which can be useful for events like sailing regattas.
