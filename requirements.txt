@@ -1,5 +1,3 @@
-# basemap
-# basemap-data-hires
 gpxpy
 matplotlib
 pytz
