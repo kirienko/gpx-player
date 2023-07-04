@@ -27,7 +27,7 @@ parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving
 args = parser.parse_args()
 
 start_time = args.start.replace(tzinfo=pytz.UTC) if args.start else None
-race_start = args.race_start.replace(tzinfo=pytz.UTC) if args.start else None
+race_start = args.race_start.replace(tzinfo=pytz.UTC) if args.race_start else None
 
 tracks = []
 points_list = []

@@ -14,7 +14,7 @@ Clone the repository and install the required dependencies with pip:
 
 ```bash
 git clone https://github.com/kirienko/gpx-player.git
-cd repo
+cd gpx-player
 pip install -r requirements.txt
 ```
 
@@ -22,6 +22,15 @@ pip install -r requirements.txt
 To run the script, pass one or more GPX file paths as command-line arguments:
 ```bash
 python main.py data/track1.gpx data/track2.gpx
+```
+
+A more sophisticated example, that produced a video above:
+```bash
+python main.py data/track1.gpx data/track2.gpx data/track3.gpx \
+       --start 2023-07-01T10:53:00+0200 \
+       --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
+       --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
+       --race_start 2023-07-01T10:58:00+0200 --marks data/race1_marks.txt -g
 ```
 ### Additional parameters:
 * `--title` or `-t`: The title of the video
