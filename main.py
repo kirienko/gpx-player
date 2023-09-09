@@ -2,12 +2,24 @@ import argparse
 import datetime as dt
 import os.path as op
 
+import geopandas as gpd
 import gpxpy
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import pytz
 
 from utils import slug, timedelta_to_hms
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import cartopy.io.img_tiles as cimgt
+
+import contextily as cx
+
+class OpenSeaMap(cimgt.GoogleWTS):
+    # Use the appropriate URL for OpenSeaMap tiles
+    _image_url = "http://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
+
 
 local_tz = pytz.timezone('Europe/Berlin')
 
@@ -23,6 +35,7 @@ parser.add_argument('--race_start', '-r', type=lambda s: dt.datetime.strptime(s,
 parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
 parser.add_argument('--marks', '-m', help='The file with the static marks to put onto the map. One pair of coordinates per line')
 parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving picture instead of MP4')
+parser.add_argument('--osm', action='store_true', help='Add OpenSeaMaps layer')
 
 args = parser.parse_args()
 
@@ -30,7 +43,7 @@ start_time = args.start.replace(tzinfo=pytz.UTC) if args.start else None
 race_start = args.race_start.replace(tzinfo=pytz.UTC) if args.race_start else None
 
 tracks = []
-points_list = []
+points_list: list[[float, float, dt.datetime]] = []
 
 # Parse the GPX files
 for filename in args.files:
@@ -41,24 +54,53 @@ for filename in args.files:
         points = [(lat, lon, time) for (lat, lon, time) in points if time.replace(tzinfo=pytz.UTC) >= start_time]
     points_list.append(points)
 
-title = args.title if args.title else ''
 
-# Initialize the figure and axis
-fig, ax = plt.subplots()
-ax.set_title(title)
+title = args.title if args.title else 'untitiled'
 
-margin = 0.001  # increase to zoom out
+
+margin = 0.005  # increase to zoom out
 lat_min = min(point[0] for point in [point for points in points_list for point in points]) - margin
 lat_max = max(point[0] for point in [point for points in points_list for point in points]) + margin
 lon_min = min(point[1] for point in [point for points in points_list for point in points]) - margin
 lon_max = max(point[1] for point in [point for points in points_list for point in points]) + margin
 
+
+if args.osm:
+    # Initialize the figure and axis with cartopy
+    fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+    # fig, ax = plt.subplots()
+    ax.set_extent([lon_min, lon_max, lat_min, lat_max])
+
+    # Add geographical features to the map
+    ax.add_feature(cfeature.COASTLINE)
+    ax.add_feature(cfeature.BORDERS, linestyle=':')
+    ax.add_feature(cfeature.LAND, edgecolor='black')
+    # ax.add_feature(cfeature.LAKES, edgecolor='black')
+    # ax.add_feature(cfeature.RIVERS)
+
+    # osm_tiles = OpenSeaMap
+    cx.add_basemap(ax, source=cx.providers.OpenStreetMap.Mapnik())
+    # ax.add_image(osm_tiles, 18)  # 10 is the zoom level; adjust as needed
+
+
+else:
+    # Initialize the figure and axis
+    fig, ax = plt.subplots()
+
+ax.set_title(title)
+
+
 ax.set_xlim(lon_min, lon_max)
 ax.set_ylim(lat_min, lat_max)
 
 # Initialize the plot with the first data
-lines = [ax.plot(points[0][1], points[0][0], '-', label=filename)[0]
-         for points, filename in zip(points_list, args.files)]
+if args.osm:
+    lines = [ax.plot(points[0][1], points[0][0], '-', label=filename, transform=ccrs.PlateCarree())[0]
+             for points, filename in zip(points_list, args.files)]
+else:
+    lines = [ax.plot(points[0][1], points[0][0], '-', label=filename)[0]
+             for points, filename in zip(points_list, args.files)]
+
 
 if args.names:
     for i, name in enumerate(args.names):
@@ -76,7 +118,6 @@ if args.marks:
 
 # Initialize counters in number of input files
 counters = [0] * len(points_list)
-
 
 # Update function for animation
 def update(current_time, points_list, lines, time_text):
@@ -116,9 +157,9 @@ ani = animation.FuncAnimation(fig, update, frames=timeline, fargs=[points_list, 
                               interval=25, blit=True)
 
 # Save the animation as a movie
-if args.gif:
-    ani.save(f"{slug(title)}.gif")
-else:
-    ani.save(f"{slug(title)}.mp4", fps=10)
+# if args.gif:
+#     ani.save(f"{slug(title)}.gif")
+# else:
+#     ani.save(f"{slug(title)}.mp4", fps=10)
 
 plt.show()

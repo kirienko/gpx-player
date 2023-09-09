@@ -58,3 +58,22 @@ GPX files can be obtained from several GPS-tracking services:
 * Strava: Go to the activity page and click on the wrench icon. Then select "Export GPX".
 * Garmin Connect: Open the activity, go to the gear icon and select "Export to GPX".
 * Endomondo: From the workout page, click on the three-dot menu icon and select "Export". Then choose "GPX".
+
+## Plotting on real maps
+The project uses `cartopy` for producing pictures on real maps like OpenSeaMaps.
+On Mac you need to additionaly install `geos` and `proj` first, which might take a bit of time:
+```
+brew install geos proj
+```
+Then install `cartopy`: `pip install cartopy`.
+
+### `cartopy` via `conda` + `conda-forge`
+However, this way didn't work for me. I use `conda` so what finally works is:
+```
+conda create -n gpx-player python=3.11
+conda activate gpx-player
+pip install -r requirements.txt
+conda install -c conda-forge proj geos
+pip uninstall shapely; pip install --no-binary :all: shapely
+pip install cartopy contextily scipy
+```

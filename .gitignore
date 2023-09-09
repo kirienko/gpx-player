@@ -1,1 +1,3 @@
 data/
+map_cache/
+__pycache__/
