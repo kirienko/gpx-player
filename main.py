@@ -7,7 +7,8 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import pytz
 
-from utils import slug, timedelta_to_hms
+from utils import slug, timedelta_to_hms, haversine_distance, km_to_nm
+from math import atan2, degrees
 
 local_tz = pytz.timezone('Europe/Berlin')
 
@@ -57,12 +58,18 @@ ax.set_xlim(lon_min, lon_max)
 ax.set_ylim(lat_min, lat_max)
 
 # Initialize the plot with the first data
-lines = [ax.plot(points[0][1], points[0][0], '-', label=filename)[0]
+lines = [ax.plot(points[0][1], points[0][0], '-', linewidth='0.8', label=filename)[0]
          for points, filename in zip(points_list, args.files)]
+heads = [ax.plot(l[0][0], l[0][1], marker='v', markersize=4, color=lines[i].get_color())[0]
+            for i,l in enumerate(points_list)]
 
 if args.names:
     for i, name in enumerate(args.names):
         lines[i].set_label(name)
+        ax.text(0.7, 0.95 - 0.03*i,
+                name[:10]+'...' if len(name) > 10 else name, transform=ax.transAxes,
+                fontsize=7)
+
 
 # Add time labels
 time_text = ax.text(0.30, 0.95, '', transform=ax.transAxes)
@@ -76,16 +83,53 @@ if args.marks:
 
 # Initialize counters in number of input files
 counters = [0] * len(points_list)
+dist_counter = [0.0] * len(points_list)
+speeds = [0.0] * len(points_list)
 
+ax_dist = [ax.text(0.83, 0.95 - 0.03*i, '', fontsize=7, transform=ax.transAxes) for i in range(len(points_list))]
+ax_speed = [ax.text(0.93, 0.95 - 0.03*i, '', fontsize=7, transform=ax.transAxes) for i in range(len(points_list))]
 
 # Update function for animation
-def update(current_time, points_list, lines, time_text):
+def update(current_time, points_list, lines, heads, time_text):
     # Only advance in points_list if their time is less than or equal to the current time
-    for points, counter, line in zip(points_list, counters, lines):
+    # iterate over points in each file
+    for idx, (points, counter, line) in enumerate(zip(points_list, counters, lines)):
+        pre_start_counter = 0
         while counter < len(points) and points[counter][2] <= current_time:
+            if counter > 0 and points[counter][2] >= race_start:
+                # Calculate the distance between two consecutive points and add it to dist_counter
+                lat1, lon1, t1 = points[counter-1]
+                lat2, lon2, t2 = points[counter]
+                dst = haversine_distance(lat1, lon1, lat2, lon2)
+                dist_counter[idx] += dst
+                speeds[idx] = km_to_nm(dst)/(t2-t1).total_seconds()*3600
+            elif counter > 0 and points[counter][2] < race_start:
+                pre_start_counter += 1
             counter += 1
-        # Update lines and time text
-        line.set_data([point[1] for point in points[:counter]], [point[0] for point in points[:counter]])
+        # Update lines
+        try:
+            # `start_counter` = 0 before start
+            #                 = counter - 60 after start
+            start_counter = 0 if points[counter][2] < race_start \
+                            else max(pre_start_counter, counter-60)
+        except IndexError:
+            start_counter = counter-60
+
+        line.set_data([point[1] for point in points[start_counter:counter]], [point[0] for point in points[start_counter:counter]])
+        # Calculate the marker rotation angle
+        y1, x1 = points[counter-2][1], points[counter-2][0]
+        y2, x2 = points[counter-1][1], points[counter-1][0]
+        theta = degrees(atan2(y2 - y1, x2 - x1))
+        # plot the marker
+        heads[idx].set_data([points[counter-1][1]], [points[counter-1][0]])
+        heads[idx].set_marker((3, 0, theta - 90))   # 3 is for triangle, 0 is the marker's center, theta-90 for rotation
+
+        # Update distance/speed table
+        ax_dist[idx].set_text(f'{km_to_nm(dist_counter[idx]):.2f} nm')  # Update the displayed distance
+        dist_counter[idx] = 0.
+        ax_speed[idx].set_text(f'{speeds[idx]:.1f} kt')  # Update the displayed speed
+
+        # Update time text
         if race_start:
             diff_time = current_time - race_start
             minutes = diff_time.total_seconds() / 60
@@ -98,7 +142,7 @@ def update(current_time, points_list, lines, time_text):
 
         else:
             time_text.set_text('Time: %s' % points[counter-1][2] if counter > 0 else '')
-    return [*lines, time_text]
+    return [*lines, *heads, time_text, *ax_dist, *ax_speed]
 
 
 # Get common timeline
@@ -110,12 +154,12 @@ timestamps = [point[2] for point in flat_points]
 # Create a sorted set of unique timestamps
 timeline = sorted(set(timestamps))
 
-ax.legend(loc='lower right')
+ax.legend(loc='lower right', fontsize=8)
 
-ani = animation.FuncAnimation(fig, update, frames=timeline, fargs=[points_list, lines, time_text],
+ani = animation.FuncAnimation(fig, update, frames=timeline, fargs=[points_list, lines, heads, time_text],
                               interval=25, blit=True)
 
-# Save the animation as a movie
+# # Save the animation as a movie
 if args.gif:
     ani.save(f"{slug(title)}.gif")
 else:
