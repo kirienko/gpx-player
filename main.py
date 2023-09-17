@@ -179,8 +179,8 @@ ani = animation.FuncAnimation(fig, update, frames=timeline, fargs=[points_list, 
 
 # # Save the animation as a movie
 if args.gif:
-    ani.save(f"{slug(title)}.gif")
+    ani.save(f"{slug(title or 'untitled')}.gif")
 else:
-    ani.save(f"{slug(title)}.mp4", fps=10)
+    ani.save(f"{slug(title or 'untitled')}.mp4", fps=10)
 
 plt.show()

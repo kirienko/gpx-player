@@ -32,7 +32,7 @@ python main.py example-data/track1.gpx example-data/track2.gpx example-data/trac
        --start 2023-07-01T10:53:00+0200 \
        --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
        --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
-       --race_start 2023-07-01T10:58:00+0200 --marks example-data/race1_marks.txt -g
+       --race_start 2023-07-01T10:58:00+0200 --marks example-data/marks.txt -g
 ```
 ### Additional parameters:
 * `--title` or `-t`: The title of the video
