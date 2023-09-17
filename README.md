@@ -5,6 +5,8 @@ GPX Race Visualizer is a Python script to visualize the progression of multiple 
 It takes as input one or more GPX files and creates an animation showing the movement of each track over time. 
 This is a simple, open-source alternative to features like Strava's Flyby, which require an account and can have privacy issues.
 
+For sailing races, it also calculates the distance covered after the 'start' signal and the current speed.
+
 ## Example:
 ![Example output](example.gif "Example of the script output")
 
@@ -21,16 +23,16 @@ pip install -r requirements.txt
 ## Usage
 To run the script, pass one or more GPX file paths as command-line arguments:
 ```bash
-python main.py data/track1.gpx data/track2.gpx
+python main.py example-data/track1.gpx example-data/track2.gpx
 ```
 
 A more sophisticated example, that produced a video above:
 ```bash
-python main.py data/track1.gpx data/track2.gpx data/track3.gpx \
+python main.py example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
        --start 2023-07-01T10:53:00+0200 \
        --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
        --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
-       --race_start 2023-07-01T10:58:00+0200 --marks data/race1_marks.txt -g
+       --race_start 2023-07-01T10:58:00+0200 --marks example-data/race1_marks.txt -g
 ```
 ### Additional parameters:
 * `--title` or `-t`: The title of the video
