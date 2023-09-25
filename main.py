@@ -78,7 +78,7 @@ if args.names:
     for i, name in enumerate(args.names):
         lines[i].set_label(name)
         ax.text(0.7, 0.95 - 0.03*i,
-                name[:12]+'...' if len(name) > 12 else name, transform=ax.transAxes,
+                name[:13]+'...' if len(name) > 13 else f'{name:>13}', transform=ax.transAxes,
                 fontsize=6)
 
 
@@ -107,15 +107,15 @@ def update(current_time, points_list, lines, heads, time_text):
     for idx, (points, counter, line) in enumerate(zip(points_list, counters, lines)):
         pre_start_counter = 0
         while counter < len(points) and points[counter][2] <= current_time:
-            if race_start:
-                if counter > 0 and points[counter][2] >= race_start:
+            if (race_start or start_time):
+                if counter > 0 and points[counter][2] >= (race_start or start_time):
                     # Calculate the distance between two consecutive points and add it to dist_counter
                     lat1, lon1, t1 = points[counter-1]
                     lat2, lon2, t2 = points[counter]
                     dst = haversine_distance(lat1, lon1, lat2, lon2)
                     dist_counter[idx] += dst
                     speeds[idx] = km_to_nm(dst)/(t2-t1).total_seconds()*3600
-                elif counter > 0 and points[counter][2] < race_start:
+                elif counter > 0 and points[counter][2] < (race_start or start_time):
                     pre_start_counter += 1
             counter += 1
         # Update lines
@@ -159,7 +159,7 @@ def update(current_time, points_list, lines, heads, time_text):
                 time_text.set_color('black')
 
         else:
-            time_text.set_text('Time: %s' % points[counter-1][2] if counter > 0 else '')
+            time_text.set_text(f'Time: {points[counter-1][2]:%Y-%m-%d %H:%M:%S}' if counter > 0 else '')
     return [*lines, *heads, time_text, *ax_dist, *ax_speed]
 
 
