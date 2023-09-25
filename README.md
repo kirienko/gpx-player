@@ -59,4 +59,9 @@ The marks are defined as a list of (latitude, longitude) tuples in a separate te
 GPX files can be obtained from several GPS-tracking services:
 * Strava: Go to the activity page and click on the wrench icon. Then select "Export GPX".
 * Garmin Connect: Open the activity, go to the gear icon and select "Export to GPX".
-* Endomondo: From the workout page, click on the three-dot menu icon and select "Export". Then choose "GPX".
+* Endomondo: From the workout page, click the three-dot menu icon and select "Export". Then choose "GPX".
+
+## Support
+Now you can buy me a coffee to encourage further development!
+
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/kirienko)
