@@ -161,7 +161,6 @@ def update(current_time, points_list, lines, heads, time_text):
                 time_text.set_color('black')
 
         else:
-            # local_time = local_tz.localize(points[counter-1][2])
             time_text.set_text(f'Time: {points[counter-1][2]:%Y-%m-%d %H:%M:%S}' if counter > 0 else '')
     return [*lines, *heads, time_text, *ax_dist, *ax_speed]
 
