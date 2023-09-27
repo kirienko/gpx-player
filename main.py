@@ -29,8 +29,8 @@ parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving
 
 args = parser.parse_args()
 
-start_time = args.start.replace(tzinfo=pytz.UTC) if args.start else None
-race_start = args.race_start.replace(tzinfo=pytz.UTC) if args.race_start else None
+start_time = args.start.replace(tzinfo=local_tz) if args.start else None
+race_start = args.race_start.replace(tzinfo=local_tz) if args.race_start else None
 
 tracks = []
 points_list = []
@@ -39,9 +39,11 @@ points_list = []
 for filename in args.files:
     with open(op.join(base_path, filename), 'r') as gpx_file:
         gpx = gpxpy.parse(gpx_file)
-    points = [(point.latitude, point.longitude, point.time) for track in gpx.tracks for segment in track.segments for point in segment.points]
+    # all timestamps show the local time from this point on:
+    points = [(point.latitude, point.longitude, point.time.astimezone(local_tz)) for track in gpx.tracks for segment in track.segments for
+              point in segment.points]
     if start_time:
-        points = [(lat, lon, time) for (lat, lon, time) in points if time.replace(tzinfo=pytz.UTC) >= start_time]
+        points = [(lat, lon, time) for (lat, lon, time) in points if time >= start_time]
     points_list.append(points)
 
 title = args.title if args.title else ''
@@ -72,7 +74,7 @@ lines = [ax.plot(points[0][1], points[0][0], '-', linewidth='0.8', label=filenam
 marker, scale = gen_arrow_head_marker(0)
 markersize = 10
 heads = [ax.plot(l[0][0], l[0][1], marker=marker, markersize=markersize, color=lines[i].get_color())[0]
-            for i,l in enumerate(points_list)]
+            for i, l in enumerate(points_list)]
 
 if args.names:
     for i, name in enumerate(args.names):
@@ -107,7 +109,7 @@ def update(current_time, points_list, lines, heads, time_text):
     for idx, (points, counter, line) in enumerate(zip(points_list, counters, lines)):
         pre_start_counter = 0
         while counter < len(points) and points[counter][2] <= current_time:
-            if (race_start or start_time):
+            if race_start or start_time:
                 if counter > 0 and points[counter][2] >= (race_start or start_time):
                     # Calculate the distance between two consecutive points and add it to dist_counter
                     lat1, lon1, t1 = points[counter-1]
@@ -159,6 +161,7 @@ def update(current_time, points_list, lines, heads, time_text):
                 time_text.set_color('black')
 
         else:
+            # local_time = local_tz.localize(points[counter-1][2])
             time_text.set_text(f'Time: {points[counter-1][2]:%Y-%m-%d %H:%M:%S}' if counter > 0 else '')
     return [*lines, *heads, time_text, *ax_dist, *ax_speed]
 
