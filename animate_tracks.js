@@ -17,7 +17,7 @@ function animateTracks(map, interval, all_points) {
             } else {
                 marker.setLatLng([point.lat, point.lon]);
             }
-            timeText.innerHTML = 'Time: ' + point.time;
+            timeText.innerHTML = 'Time: ' + point.time + '<br>Speed: ' + point.speed.toFixed(2) + ' knots';
             index++;
         } else {
             clearInterval(animation);
@@ -26,5 +26,6 @@ function animateTracks(map, interval, all_points) {
     var animation = setInterval(updateMarker, interval);
 }
 
-var gpx_points = gpx_points_data; // This variable will be set in the HTML by the Python script
+var gpx_points = gpx_points_data;
 animateTracks(map, 1000, gpx_points);
+

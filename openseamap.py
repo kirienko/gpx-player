@@ -41,7 +41,9 @@ def calculate_speeds(points):
 
 def speed_to_color(speed, max_speed):
     norm_speed = speed / max_speed
-    return plt.cm.RdYlGn(norm_speed)[:3]  # using RdYlGn colormap, returns RGB tuple
+    color = plt.cm.RdYlGn(norm_speed)[:4]  # Use RGBA for opacity
+    return "rgba({},{},{},{})".format(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), color[3])
+
 
 
 def create_map(gpx_files):
@@ -75,18 +77,27 @@ def create_map(gpx_files):
 
     for points in [all_points]:
         lat_lon = [(p['lat'], p['lon']) for p, _ in points]
-        colors = [speed_to_color(s, max_speed) for _, s in points]
+        speeds = [s for _, s in points]
+        times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p, _ in points]
         for i in range(len(lat_lon) - 1):
-            color = "#{:02x}{:02x}{:02x}".format(int(colors[i][0] * 255), int(colors[i][1] * 255),
-                                                 int(colors[i][2] * 255))
-            folium.PolyLine(lat_lon[i:i + 2], color=color, weight=2.5, opacity=1).add_to(folium_map)
+            color = speed_to_color(speeds[i], max_speed)
+            tooltip_content = f"Time: {times[i]} UTC<br>Speed: {speeds[i]:.2f} knots"
+            folium.PolyLine(
+                lat_lon[i:i + 2],
+                color=color,
+                weight=2.5,
+                opacity=1,
+                tooltip=folium.Tooltip(tooltip_content)
+            ).add_to(folium_map)
 
     return folium_map, all_points
 
 
 def add_animation(folium_map, all_points):
     gpx_points_data = json.dumps(
-        [{'lat': p['lat'], 'lon': p['lon'], 'time': p['time'].strftime('%Y-%m-%d %H:%M:%S')} for p, _ in all_points])
+        [{'lat': p['lat'], 'lon': p['lon'], 'time': p['time'].strftime('%Y-%m-%d %H:%M:%S'), 'speed': s} for p, s in
+         all_points]
+    )
 
     animation_script = f"""
     <script>
@@ -120,9 +131,9 @@ def add_legend(folium_map, max_speed):
 def main():
     gpx_files = [
         # 'data/hanskalbsand/Rund_Hanskalbsand_2021.gpx',
-        # 'data/hanskalbsand/Rund_Hanskalbsand_2023.gpx',
-        'data/hanskalbsand/Gin_Sul_Rund_Hanskalbsand_Regatta.gpx',
-        # 'data/Bahia_Training_7_2024.gpx'
+        # 'data/hanskalbsand/Rund_Hanskalbsand_2023_Andreas.gpx',
+        # 'data/hanskalbsand/Gin_Sul_Rund_Hanskalbsand_Regatta.gpx',
+        # 'data/Bahia_Training_8_2024.gpx'
     ]
 
     folium_map, all_points = create_map(gpx_files)
