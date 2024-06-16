@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 parser = argparse.ArgumentParser()
 parser.add_argument('--files', nargs='+', help='GPX files to process')
 parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
+parser.add_argument('--max-speed', '-ms', nargs='+', help='Maximum speed (default: 12 knots)', default=12, dest='max_speed')
+parser.add_argument('--title', '-t', help='The title of the page', dest='title', default=None)
 args = parser.parse_args()
 
 
@@ -36,8 +38,8 @@ def calculate_speeds(points):
         time_diff = (time2 - time1).total_seconds()
         if time_diff > 0:
             speed = distance / time_diff * 1.94384  # Convert m/s to knots
-            if speed > 9:
-                print(f"Warning: speed {speed} exceeds 15 kn at time {time1} (dt = {time_diff}s)")
+            if speed > args.max_speed:
+                print(f"Warning: speed {speed} exceeds {args.max_speed} kn at time {time1} (dt = {time_diff}s)")
                 speed = 0.
             speeds.append(speed)
         else:
@@ -104,10 +106,32 @@ def add_animation(folium_map, all_tracks):
     animation_script = f"""
     <script>
     var gpx_points_data = {json.dumps(gpx_points_data)};
+    document.title = "{args.title if args.title else 'GPX Player'}";
     </script>
     <script src="animate_tracks.js"></script>
     """
     folium_map.get_root().html.add_child(folium.Element(animation_script))
+
+    # Add the title to the body of the HTML
+    if args.title is not None:
+        # Add the header with custom styles
+        header_html = f"""
+        <div style="
+            position: fixed; 
+            top: 10px; left: 50%; transform: translateX(-50%); 
+            background-color: rgba(0, 0, 0, 0.5); 
+            color: white; 
+            padding: 10px 20px; 
+            border: 2px solid white; 
+            border-radius: 5px;
+            z-index: 9999;
+            font-size: 24px;
+            text-align: center;
+        ">
+            {args.title}
+        </div>
+        """
+        folium_map.get_root().html.add_child(folium.Element(header_html))
 
 
 def add_legend(folium_map, max_speed):
