@@ -1,3 +1,4 @@
 gpxpy
+folium
 matplotlib
 pytz
