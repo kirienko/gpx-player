@@ -1,9 +1,11 @@
 import argparse
+import json
+
+import folium
 import gpxpy
 import gpxpy.gpx
-import folium
-import json
 import matplotlib.pyplot as plt
+from jinja2 import Environment, FileSystemLoader
 
 # Define argument parser
 parser = argparse.ArgumentParser()
@@ -98,10 +100,13 @@ def create_map(gpx_files, names=None):
     return folium_map, all_tracks
 
 
-def add_animation(folium_map, all_tracks):
+def add_animation(folium_map, all_tracks, jinja_env):
     gpx_points_data = []
     for track in all_tracks:
-        gpx_points_data.extend([{'lat': p['lat'], 'lon': p['lon'], 'time': p['time'].strftime('%Y-%m-%d %H:%M:%S'), 'speed': s} for p, s in track])
+        gpx_points_data.extend([{'lat': p['lat'], 'lon': p['lon'],
+                                 'time': p['time'].strftime('%Y-%m-%d %H:%M:%S'),
+                                 'speed': s}
+                                for p, s in track])
 
     animation_script = f"""
     <script>
@@ -115,42 +120,14 @@ def add_animation(folium_map, all_tracks):
     # Add the title to the body of the HTML
     if args.title is not None:
         # Add the header with custom styles
-        header_html = f"""
-        <div style="
-            position: fixed; 
-            top: 10px; left: 50%; transform: translateX(-50%); 
-            background-color: rgba(0, 0, 0, 0.5); 
-            color: white; 
-            padding: 10px 20px; 
-            border: 2px solid white; 
-            border-radius: 5px;
-            z-index: 9999;
-            font-size: 24px;
-            text-align: center;
-        ">
-            {args.title}
-        </div>
-        """
+        template = jinja_env.get_template('header_template.html')
+        header_html = template.render(title=args.title)
         folium_map.get_root().html.add_child(folium.Element(header_html))
 
 
-def add_legend(folium_map, max_speed):
-    legend_html = f"""
-    <div style="
-        position: fixed; 
-        bottom: 50px; left: 50px; width: 250px; height: 90px; 
-        background-color: white; z-index:9999; font-size:14px;
-        border:2px solid grey; padding: 10px;
-    ">
-    <h5>Speed (knots)</h5>
-    <div style="background: linear-gradient(to right, red, yellow, green); height: 20px;"></div>
-    <div style="display: flex; justify-content: space-between;font-size:12px">
-        <span>0</span>
-        <span>{max_speed/2:.1f}</span>
-        <span>{max_speed:.1f}</span>
-    </div>
-    </div>
-    """
+def add_legend(folium_map, max_speed, jinja_env):
+    template = jinja_env.get_template('speed_legend_template.html')
+    legend_html = template.render(max_speed=max_speed)
     folium_map.get_root().html.add_child(folium.Element(legend_html))
 
 
@@ -158,11 +135,13 @@ def main():
     gpx_files = args.files
     names = args.names
 
+    env = Environment(loader=FileSystemLoader('.'))
+
     folium_map, all_tracks = create_map(gpx_files, names)
-    add_animation(folium_map, all_tracks)
+    add_animation(folium_map, all_tracks, env)
 
     max_speed = max(s for track in all_tracks for _, s in track)
-    add_legend(folium_map, max_speed)
+    add_legend(folium_map, max_speed, env)
 
     folium_map.save('boat_tracks.html')
     print('Map has been saved to boat_tracks.html')
