@@ -1,70 +1,93 @@
-var map;
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Create the slider
-    var slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = 0;
-    slider.max = 1000;
-    slider.value = 0;
-    slider.style.position = 'fixed';
-    slider.style.bottom = '20px';
-    slider.style.left = '50%';
-    slider.style.transform = 'translateX(-50%)';
-    slider.style.width = '80%';
-    slider.style.zIndex = 1000;
-
-    // Create the time legend
-    var timeLegend = document.createElement('div');
-    timeLegend.style.position = 'fixed';
-    timeLegend.style.top = '10px';
-    timeLegend.style.right = '10px';
-    timeLegend.style.backgroundColor = 'white';
-    timeLegend.style.padding = '10px';
-    timeLegend.style.border = '1px solid grey';
-    timeLegend.style.zIndex = 1000;
-
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = createSlider();
+    const timeLegend = createTimeLegend();
     document.body.appendChild(slider);
     document.body.appendChild(timeLegend);
 
-    slider.addEventListener('input', function () {
-        var timeIndex = Math.floor(this.value / 1000 * (gpx_timestamps.length - 1));
-        var currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
+    slider.addEventListener('input', () => {
+        const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
+        const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
         timeLegend.innerHTML = `Current Time: ${new Date(currentTime).toUTCString()}`;
     });
 
     // Initialize with the first timestamp
     slider.dispatchEvent(new Event('input'));
+
+    const map = initializeMap();
+    animateTracks(map, 1000, gpx_points_data);
 });
 
-function animateTracks(map, interval, all_points) {
-    var marker = null;
-    var index = 0;
-    var timeText = document.createElement('div');
-    timeText.style.background = 'white';
-    timeText.style.padding = '5px';
-    timeText.style.position = 'absolute';
-    timeText.style.bottom = '50px';
-    timeText.style.left = '50px';
+function createSlider() {
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = 0;
+    slider.max = 1000;
+    slider.value = 0;
+    Object.assign(slider.style, {
+        position: 'fixed',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '80%',
+        zIndex: 1000,
+    });
+    return slider;
+}
+
+function createTimeLegend() {
+    const timeLegend = document.createElement('div');
+    Object.assign(timeLegend.style, {
+        position: 'fixed',
+        top: '10px',
+        right: '10px',
+        backgroundColor: 'white',
+        padding: '10px',
+        border: '1px solid grey',
+        zIndex: 1000,
+    });
+    return timeLegend;
+}
+
+function initializeMap() {
+    const map = L.map('map').setView([0, 0], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    return map;
+}
+
+function animateTracks(map, interval, allPoints) {
+    let marker = null;
+    let index = 0;
+    const timeText = createTimeText();
     document.body.appendChild(timeText);
 
     function updateMarker() {
-        if (index < all_points.length) {
-            var point = all_points[index];
+        if (index < allPoints.length) {
+            const point = allPoints[index];
             if (!marker) {
                 marker = L.marker([point.lat, point.lon]).addTo(map);
             } else {
                 marker.setLatLng([point.lat, point.lon]);
             }
-            timeText.innerHTML = 'Time: ' + point.time + '<br>Speed: ' + point.speed.toFixed(2) + ' knots';
+            timeText.innerHTML = `Time: ${point.time}<br>Speed: ${point.speed.toFixed(2)} knots`;
             index++;
         } else {
             clearInterval(animation);
         }
     }
-    var animation = setInterval(updateMarker, interval);
+
+    const animation = setInterval(updateMarker, interval);
 }
 
-var gpx_points = gpx_points_data;
-animateTracks(map, 1000, gpx_points);
-
+function createTimeText() {
+    const timeText = document.createElement('div');
+    Object.assign(timeText.style, {
+        background: 'white',
+        padding: '5px',
+        position: 'absolute',
+        bottom: '50px',
+        left: '50px',
+    });
+    return timeText;
+}
