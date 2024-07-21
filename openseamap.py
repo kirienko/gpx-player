@@ -4,8 +4,10 @@ import json
 import folium
 import gpxpy
 import gpxpy.gpx
+import jinja2
 import matplotlib.pyplot as plt
 from jinja2 import Environment, FileSystemLoader
+from typing import List, Tuple
 
 # Define argument parser
 parser = argparse.ArgumentParser()
@@ -16,7 +18,7 @@ parser.add_argument('--title', '-t', help='The title of the page', dest='title',
 args = parser.parse_args()
 
 
-def parse_gpx(file_path):
+def parse_gpx(file_path: str) -> List[dict]:
     with open(file_path, 'r') as gpx_file:
         gpx = gpxpy.parse(gpx_file)
         points = []
@@ -31,7 +33,7 @@ def parse_gpx(file_path):
         return points
 
 
-def calculate_speeds(points):
+def calculate_speeds(points: List[dict]) -> List[float]:
     speeds = []
     for i in range(1, len(points)):
         lat1, lon1, time1 = points[i - 1]['lat'], points[i - 1]['lon'], points[i - 1]['time']
@@ -50,13 +52,13 @@ def calculate_speeds(points):
     return speeds
 
 
-def speed_to_color(speed, max_speed):
+def speed_to_color(speed: float, max_speed: float) -> str:
     norm_speed = speed / max_speed
     color = plt.cm.RdYlGn(norm_speed)[:4]  # Use RGBA for opacity
     return "rgba({},{},{},{})".format(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), color[3])
 
 
-def create_map(gpx_files, names=None):
+def create_map(gpx_files: List[str], names: List[str] = None) -> Tuple[folium.Map, List[List]]:
     folium_map = folium.Map(location=[0, 0], zoom_start=12)
 
     folium.TileLayer('openstreetmap').add_to(folium_map)
@@ -100,7 +102,7 @@ def create_map(gpx_files, names=None):
     return folium_map, all_tracks
 
 
-def add_animation(folium_map, all_tracks, jinja_env):
+def add_animation(folium_map: folium.Map, all_tracks: List[List], jinja_env: jinja2.Environment) -> None:
     gpx_points_data = []
     for track in all_tracks:
         gpx_points_data.extend([{'lat': p['lat'], 'lon': p['lon'],
@@ -125,7 +127,7 @@ def add_animation(folium_map, all_tracks, jinja_env):
         folium_map.get_root().html.add_child(folium.Element(header_html))
 
 
-def add_legend(folium_map, max_speed, jinja_env):
+def add_legend(folium_map: folium.Map, max_speed: float, jinja_env: jinja2.Environment) -> None:
     template = jinja_env.get_template('speed_legend_template.html')
     legend_html = template.render(max_speed=max_speed)
     folium_map.get_root().html.add_child(folium.Element(legend_html))
