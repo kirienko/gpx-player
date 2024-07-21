@@ -104,22 +104,24 @@ def create_map(gpx_files: List[str], names: List[str] = None) -> Tuple[folium.Ma
 
 def add_animation(folium_map: folium.Map, all_tracks: List[List], jinja_env: jinja2.Environment) -> None:
     gpx_points_data = []
-    for track in all_tracks:
-        gpx_points_data.extend([{'lat': p['lat'], 'lon': p['lon'],
-                                 'time': p['time'].strftime('%Y-%m-%d %H:%M:%S'),
-                                 'speed': s}
-                                for p, s in track])
+    gpx_timestamps = sorted(set(point[0]['time'] for track in all_tracks for point in track))
+    min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
+    time_range = (max_time - min_time).total_seconds()
 
     animation_script = f"""
     <script>
     var gpx_points_data = {json.dumps(gpx_points_data)};
+    var gpx_timestamps = {json.dumps([t.strftime('%Y-%m-%d %H:%M:%S') for t in gpx_timestamps])};
+    var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S')}').getTime();
+    var max_time = new Date('{max_time.strftime('%Y-%m-%dT%H:%M:%S')}').getTime();
+    var time_range = {time_range};
     document.title = "{args.title if args.title else 'GPX Player'}";
     </script>
     <script src="animate_tracks.js"></script>
     """
     folium_map.get_root().html.add_child(folium.Element(animation_script))
 
-    # Add the title to the body of the HTML
+    # Add the title to the body of the HTML if needed
     if args.title is not None:
         # Add the header with custom styles
         template = jinja_env.get_template('header_template.html')
