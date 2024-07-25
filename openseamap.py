@@ -31,6 +31,13 @@ def parse_gpx(file_path: str) -> List[dict]:
 
 
 def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
+    """
+    Calculates the speed of each point in the list of points.
+
+    The `max_speed` is used to control the dirty data: if the speed is larger
+    than some reasonable value (max_speed), then usually this means zero division,
+    that's we simply nullify the speed.
+    """
     speeds = []
     for i in range(1, len(points)):
         lat1, lon1, time1 = points[i - 1].values()
@@ -54,7 +61,8 @@ def speed_to_color(speed: float, max_speed: float) -> str:
     return f"rgba({int(color[0] * 255)}, {int(color[1] * 255)}, {int(color[2] * 255)}, {color[3]})"
 
 
-def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tuple[folium.Map, List[List]]:
+def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> (
+        Tuple)[folium.Map, List[List], float]:
     folium_map = folium.Map(location=[0, 0], zoom_start=12)
     folium.TileLayer('openstreetmap').add_to(folium_map)
     folium.TileLayer(
@@ -70,6 +78,8 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
         points = parse_gpx(gpx_file)
         speeds = calculate_speeds(points, max_speed)
         all_tracks.append(list(zip(points, speeds)))
+
+    max_speed = max(s for track in all_tracks for _, s in track)
 
     # Calculate map bounds
     latitudes = [p['lat'] for track in all_tracks for p, _ in track]
@@ -93,7 +103,7 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
                 tooltip=folium.Tooltip(tooltip_content)
             ).add_to(folium_map)
 
-    return folium_map, all_tracks
+    return folium_map, all_tracks, max_speed
 
 
 def add_animation(folium_map: folium.Map, all_tracks: List[List], jinja_env: jinja2.Environment, title: str) -> None:
@@ -134,10 +144,9 @@ def main():
 
     env = Environment(loader=FileSystemLoader('.'))
 
-    folium_map, all_tracks = create_map(gpx_files, names, args.max_speed)
+    folium_map, all_tracks, max_speed = create_map(gpx_files, names, args.max_speed)
     add_animation(folium_map, all_tracks, env, args.title)
 
-    max_speed = max(s for track in all_tracks for _, s in track)
     add_legend(folium_map, max_speed, env)
 
     folium_map.save('boat_tracks.html')
