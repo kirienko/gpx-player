@@ -36,7 +36,8 @@ python main.py example-data/track1.gpx example-data/track2.gpx example-data/trac
 ```
 ### Additional parameters:
 * `--title` or `-t`: The title of the video
-* `--start` or `-s`: start time in the format `2023-06-30T10:53:00+0200`, all points before that will not be plotted
+* `--start` or `-s`: start time in the format `2023-06-30T10:53:00+0200`, all points _before_ that will not be plotted
+* `--end` or `-e`: end time in the format `2023-06-30T11:53:00+0200`, all points _after_ that will not be plotted
 * `--names` or `-n`: names of the participants (otherwise the file names will be used in the legend)
 * `--race_start`, `-r`: Race start time in the format `YYYY-MM-DDTHH:MM:SS%z`, e.g. `2023-07-01T12:29:00+0200`
 * `--names` or `-n`: Names of the participants

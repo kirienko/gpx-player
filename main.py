@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('files', nargs='+', help='GPX files to process')
 parser.add_argument('--title', '-t', help='The title of the video')
 parser.add_argument('--start', '-s', type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'), help='Start time (YYYY-MM-DDTHH:MM:SS%z)')
+parser.add_argument('--end', '-e', type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'), help='End time (YYYY-MM-DDTHH:MM:SS%z)')
 parser.add_argument('--race_start', '-r', type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'),
                     help='Race start time (YYYY-MM-DDTHH:MM:SS%z)')
 parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
@@ -30,6 +31,7 @@ parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving
 args = parser.parse_args()
 
 start_time = args.start.replace(tzinfo=local_tz) if args.start else None
+end_time = args.end.replace(tzinfo=local_tz) if args.end else None
 race_start = args.race_start.replace(tzinfo=local_tz) if args.race_start else None
 
 tracks = []
@@ -44,6 +46,8 @@ for filename in args.files:
               point in segment.points]
     if start_time:
         points = [(lat, lon, time) for (lat, lon, time) in points if time >= start_time]
+    if end_time:
+        points = [(lat, lon, time) for (lat, lon, time) in points if time <= end_time]
     points_list.append(points)
 
 title = args.title if args.title else ''
