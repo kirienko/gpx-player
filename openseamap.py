@@ -63,7 +63,7 @@ def speed_to_color(speed: float, max_speed: float) -> str:
 
 def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> (
         Tuple)[folium.Map, List[List], float]:
-    folium_map = folium.Map(location=[0, 0], zoom_start=12)
+    folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False)
     folium.TileLayer('openstreetmap').add_to(folium_map)
     folium.TileLayer(
         tiles='https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
