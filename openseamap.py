@@ -86,12 +86,14 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> (
     longitudes = [p['lon'] for track in all_tracks for p, _ in track]
     folium_map.fit_bounds([[min(latitudes), min(longitudes)], [max(latitudes), max(longitudes)]])
 
+    track_layers = []
     for i, track in enumerate(all_tracks):
         lat_lon = [(p['lat'], p['lon']) for p, _ in track]
         speeds = [s for _, s in track]
         times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p, _ in track]
         name = names[i] if names and i < len(names) else gpx_files[i]
 
+        track_layer = folium.FeatureGroup(name=name, show=True)
         for j in range(len(lat_lon) - 1):
             color = speed_to_color(speeds[j], max_speed)
             tooltip_content = f"Name: {name}<br>Time: {times[j]} UTC<br>Speed: {speeds[j]:.2f} knots"
@@ -101,7 +103,11 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> (
                 weight=2.5,
                 opacity=1,
                 tooltip=folium.Tooltip(tooltip_content)
-            ).add_to(folium_map)
+            ).add_to(track_layer)
+        track_layers.append(track_layer)
+        folium_map.add_child(track_layer)
+
+    folium.LayerControl(collapsed=False).add_to(folium_map)
 
     return folium_map, all_tracks, max_speed
 

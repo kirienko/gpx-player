@@ -14,6 +14,23 @@ document.addEventListener('DOMContentLoaded', () => {
     slider.dispatchEvent(new Event('input'));
 
     const map = initializeMap();
+    const trackLayers = [];
+
+    gpx_points_data.forEach((track, index) => {
+        const layer = L.layerGroup();
+        track.forEach(point => {
+            L.marker([point.lat, point.lon]).addTo(layer);
+        });
+        trackLayers.push(layer);
+        layer.addTo(map);
+    });
+
+    const overlayMaps = {};
+    gpx_points_data.forEach((_, index) => {
+        overlayMaps[`Track ${index + 1}`] = trackLayers[index];
+    });
+
+    L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
     animateTracks(map, 1000, gpx_points_data);
 });
 
