@@ -12,26 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize with the first timestamp
     slider.dispatchEvent(new Event('input'));
-
-    const map = initializeMap();
-    const trackLayers = [];
-
-    gpx_points_data.forEach((track, index) => {
-        const layer = L.layerGroup();
-        track.forEach(point => {
-            L.marker([point.lat, point.lon]).addTo(layer);
-        });
-        trackLayers.push(layer);
-        layer.addTo(map);
-    });
-
-    const overlayMaps = {};
-    gpx_points_data.forEach((_, index) => {
-        overlayMaps[`Track ${index + 1}`] = trackLayers[index];
-    });
-
-    L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
-    animateTracks(map, 1000, gpx_points_data);
 });
 
 function createSlider() {
@@ -63,48 +43,4 @@ function createTimeLegend() {
         zIndex: 1000,
     });
     return timeLegend;
-}
-
-function initializeMap() {
-    const map = L.map('map').setView([0, 0], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
-    return map;
-}
-
-function animateTracks(map, interval, allPoints) {
-    let marker = null;
-    let index = 0;
-    const timeText = createTimeText();
-    document.body.appendChild(timeText);
-
-    function updateMarker() {
-        if (index < allPoints.length) {
-            const point = allPoints[index];
-            if (!marker) {
-                marker = L.marker([point.lat, point.lon]).addTo(map);
-            } else {
-                marker.setLatLng([point.lat, point.lon]);
-            }
-            timeText.innerHTML = `Time: ${point.time}<br>Speed: ${point.speed.toFixed(2)} knots`;
-            index++;
-        } else {
-            clearInterval(animation);
-        }
-    }
-
-    const animation = setInterval(updateMarker, interval);
-}
-
-function createTimeText() {
-    const timeText = document.createElement('div');
-    Object.assign(timeText.style, {
-        background: 'white',
-        padding: '5px',
-        position: 'absolute',
-        bottom: '50px',
-        left: '50px',
-    });
-    return timeText;
 }

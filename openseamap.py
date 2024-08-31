@@ -61,17 +61,18 @@ def speed_to_color(speed: float, max_speed: float) -> str:
     return f"rgba({int(color[0] * 255)}, {int(color[1] * 255)}, {int(color[2] * 255)}, {color[3]})"
 
 
-def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> (
-        Tuple)[folium.Map, List[List], float]:
+def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tuple[folium.Map, List[List], float, str]:
     folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False)
+    map_id = folium_map.get_name()
+
     folium.TileLayer('openstreetmap').add_to(folium_map)
     # Add OpenSeaMap layer directly to the map, not to the layer control
     folium.TileLayer(
         tiles='https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
         attr='OpenSeaMap',
         name='OpenSeaMap',
-        overlay=True,
-        control=False  # Set control to False to exclude from layer control
+        overlay=False,
+        control=False  # Set control to `False` to exclude from layer control
     ).add_to(folium_map)
 
     all_tracks = []
@@ -110,10 +111,13 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> (
 
     folium.LayerControl(collapsed=False).add_to(folium_map)
 
-    return folium_map, all_tracks, max_speed
+    return folium_map, all_tracks, max_speed, map_id
 
 
-def add_animation(folium_map: folium.Map, all_tracks: List[List], jinja_env: jinja2.Environment, title: str) -> None:
+def add_animation(folium_map: folium.Map,
+                  all_tracks: List[List],
+                  jinja_env: jinja2.Environment,
+                  title: str, map_id:str) -> None:
     gpx_points_data = []
     gpx_timestamps = sorted(set(point[0]['time'] for track in all_tracks for point in track))
     min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
@@ -126,6 +130,7 @@ def add_animation(folium_map: folium.Map, all_tracks: List[List], jinja_env: jin
     var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S')}').getTime();
     var max_time = new Date('{max_time.strftime('%Y-%m-%dT%H:%M:%S')}').getTime();
     var time_range = {time_range};
+    var map_id = "{map_id}";
     document.title = "{title if title else 'GPX Player'}";
     </script>
     <script src="animate_tracks.js"></script>
@@ -151,8 +156,8 @@ def main():
 
     env = Environment(loader=FileSystemLoader('.'))
 
-    folium_map, all_tracks, max_speed = create_map(gpx_files, names, args.max_speed)
-    add_animation(folium_map, all_tracks, env, args.title)
+    folium_map, all_tracks, max_speed, map_id = create_map(gpx_files, names, args.max_speed)
+    add_animation(folium_map, all_tracks, env, args.title, map_id)
 
     add_legend(folium_map, max_speed, env)
 
