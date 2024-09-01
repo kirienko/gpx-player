@@ -4,10 +4,34 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(slider);
     document.body.appendChild(timeLegend);
 
+    const trackMarkers = gpx_points_data.map(track => {
+        const marker = L.circleMarker([track[0].lat, track[0].lon], {
+            radius: 5,
+            color: 'blue',
+            fillColor: '#f03',
+            fillOpacity: 0.5
+        }).addTo(map);
+        return marker;
+    });
+
     slider.addEventListener('input', () => {
         const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
         const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
         timeLegend.innerHTML = `Current Time: ${new Date(currentTime).toUTCString()}`;
+
+        trackMarkers.forEach((marker, trackIndex) => {
+            const track = gpx_points_data[trackIndex];
+            let closestPoint = track[0];
+            for (let i = 1; i < track.length; i++) {
+                const pointTime = new Date(track[i].time).getTime();
+                if (pointTime <= currentTime) {
+                    closestPoint = track[i];
+                } else {
+                    break;
+                }
+            }
+            marker.setLatLng([closestPoint.lat, closestPoint.lon]);
+        });
     });
 
     // Initialize with the first timestamp
