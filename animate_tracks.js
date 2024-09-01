@@ -4,11 +4,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(slider);
     document.body.appendChild(timeLegend);
 
-    const map = L.map(map_id);
+    // Access the Folium-initialized map using the dynamically generated map_id
+    const map = window[map_id]; // Now `map` refers to the Folium map object
 
     const trackMarkers = gpx_points_data.map(track => {
         const marker = L.circleMarker([track[0].lat, track[0].lon], {
-            radius: 5,
+            radius: 4,
             color: 'blue',
             fillColor: '#f03',
             fillOpacity: 0.5
