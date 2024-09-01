@@ -1,11 +1,15 @@
 <div style="
     position: fixed;
     bottom: 50px; left: 50px; width: 250px; height: 90px;
-    background-color: white; z-index:9999; font-size:14px;
-    border:2px solid grey; padding: 10px;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.5); z-index:9999; font-size:12px;
+    border:2px solid white;
+    border-radius: 5px;
+    padding: 2px 3px;
 ">
     <h5>Speed (knots)</h5>
-    <div style="background: linear-gradient(to right, red, yellow, green); height: 20px;"></div>
+    <div style="background: linear-gradient(to right, red, yellow, green);
+                height: 20px;border:1px solid white;"></div>
     <div style="display: flex; justify-content: space-between;font-size:12px">
         <span>0</span>
         <span>{{ '{:.1f}'.format(max_speed / 2) }}</span>
