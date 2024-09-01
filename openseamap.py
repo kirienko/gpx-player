@@ -1,12 +1,15 @@
 import argparse
 import json
+from typing import List, Tuple
+
 import folium
 import gpxpy
 import gpxpy.gpx
 import jinja2
 import matplotlib.pyplot as plt
 from jinja2 import Environment, FileSystemLoader
-from typing import List, Tuple
+
+from utils import track_serializer
 
 
 def parse_arguments():
@@ -118,17 +121,17 @@ def add_animation(folium_map: folium.Map,
                   all_tracks: List[List],
                   jinja_env: jinja2.Environment,
                   title: str, map_id:str) -> None:
-    gpx_points_data = []
+    gpx_points_data = [[point[0] for point in track] for track in all_tracks]
     gpx_timestamps = sorted(set(point[0]['time'] for track in all_tracks for point in track))
     min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
     time_range = (max_time - min_time).total_seconds()
 
     animation_script = f"""
     <script>
-    var gpx_points_data = {json.dumps(gpx_points_data)};
-    var gpx_timestamps = {json.dumps([t.strftime('%Y-%m-%d %H:%M:%S') for t in gpx_timestamps])};
-    var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S')}').getTime();
-    var max_time = new Date('{max_time.strftime('%Y-%m-%dT%H:%M:%S')}').getTime();
+    var gpx_points_data = {json.dumps(gpx_points_data, default=track_serializer)};
+    var gpx_timestamps = {json.dumps([t for t in gpx_timestamps], default=track_serializer)};
+    var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();
+    var max_time = new Date('{max_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();
     var time_range = {time_range};
     var map_id = "{map_id}";
     document.title = "{title if title else 'GPX Player'}";
