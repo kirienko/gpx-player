@@ -101,7 +101,7 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
         times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p, _ in track]
         name = names[i] if names and i < len(names) else gpx_files[i]
 
-        track_layer = folium.FeatureGroup(name=name, show=True)
+        track_layer = folium.FeatureGroup(name=f"<span style='color:{color};'>&#9679;</span> {name}", show=True)
         for j in range(len(lat_lon) - 1):
             color = speed_to_color(speeds[j], max_speed)
             tooltip_content = f"Name: {name}<br>Time: {times[j]} UTC<br>Speed: {speeds[j]:.2f} knots"
@@ -114,20 +114,6 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
             ).add_to(track_layer)
         track_layers.append(track_layer)
         folium_map.add_child(track_layer)
-
-    legend_html = f"""
-    <div style='position: fixed; 
-                bottom: 50px; left: 50px; width: 150px; height: auto; 
-                background-color: white; z-index:9999; font-size:14px;'>
-    <h4>Participants</h4>
-    <ul style='list-style: none; padding: 0;'>
-    """
-    for i, name in enumerate(names):
-        color = colors[i % len(colors)]
-        legend_html += f"<li><span style='color:{color};'>&#9679;</span> {name}</li>"
-    legend_html += "</ul></div>"
-    
-    folium_map.get_root().html.add_child(folium.Element(legend_html))
     
     folium.LayerControl(collapsed=False).add_to(folium_map)
 
