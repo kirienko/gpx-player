@@ -7,11 +7,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Access the Folium-initialized map using the dynamically generated map_id
     const map = window[map_id]; // Now `map` refers to the Folium map object
 
-    const trackMarkers = gpx_points_data.map(track => {
+    const colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta'];
+    
+    const trackMarkers = gpx_points_data.map((track, index) => {
+        const color = colors[index % colors.length];
         const marker = L.circleMarker([track[0].lat, track[0].lon], {
             radius: 4,
-            color: 'blue',
-            fillColor: '#f03',
+            color: color,
+            fillColor: color,
             fillOpacity: 0.5
         }).addTo(map);
         return marker;

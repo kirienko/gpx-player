@@ -92,7 +92,10 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
     folium_map.fit_bounds([[min(latitudes), min(longitudes)], [max(latitudes), max(longitudes)]])
 
     track_layers = []
+    colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
+    
     for i, track in enumerate(all_tracks):
+        color = colors[i % len(colors)]
         lat_lon = [(p['lat'], p['lon']) for p, _ in track]
         speeds = [s for _, s in track]
         times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p, _ in track]
@@ -112,6 +115,20 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
         track_layers.append(track_layer)
         folium_map.add_child(track_layer)
 
+    legend_html = f"""
+    <div style='position: fixed; 
+                bottom: 50px; left: 50px; width: 150px; height: auto; 
+                background-color: white; z-index:9999; font-size:14px;'>
+    <h4>Participants</h4>
+    <ul style='list-style: none; padding: 0;'>
+    """
+    for i, name in enumerate(names):
+        color = colors[i % len(colors)]
+        legend_html += f"<li><span style='color:{color};'>&#9679;</span> {name}</li>"
+    legend_html += "</ul></div>"
+    
+    folium_map.get_root().html.add_child(folium.Element(legend_html))
+    
     folium.LayerControl(collapsed=False).add_to(folium_map)
 
     return folium_map, all_tracks, max_speed, map_id
