@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(slider);
     document.body.appendChild(timeLegend);
 
+    const map = L.map(map_id);
+
     const trackMarkers = gpx_points_data.map(track => {
         const marker = L.circleMarker([track[0].lat, track[0].lon], {
             radius: 5,
