@@ -72,5 +72,14 @@ function createTimeLegend() {
         border: '1px solid grey',
         zIndex: 1000,
     });
+    const playPauseButton = document.createElement('button');
+    playPauseButton.innerHTML = '⏯️'; // Play/Pause icon
+    playPauseButton.style.marginTop = '5px';
+    playPauseButton.addEventListener('click', () => {
+        // Placeholder for play/pause functionality
+    });
+
+    timeLegend.appendChild(playPauseButton);
+
     return timeLegend;
 }
