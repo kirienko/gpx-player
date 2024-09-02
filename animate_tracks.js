@@ -65,7 +65,7 @@ function createTimeLegend() {
     const timeLegend = document.createElement('div');
     Object.assign(timeLegend.style, {
         position: 'fixed',
-        top: '10px',
+        bottom: '50px',
         right: '10px',
         backgroundColor: 'white',
         padding: '10px',
