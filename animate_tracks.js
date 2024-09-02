@@ -72,6 +72,10 @@ function createTimeLegend() {
         border: '1px solid grey',
         zIndex: 1000,
     });
+    timeLegend.style.display = 'flex';
+    timeLegend.style.flexDirection = 'column';
+    timeLegend.style.alignItems = 'center';
+
     const playPauseButton = document.createElement('button');
     playPauseButton.innerHTML = '⏯️'; // Play/Pause icon
     playPauseButton.style.marginTop = '50px';
