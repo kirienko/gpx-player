@@ -74,11 +74,10 @@ function createTimeLegend() {
     });
     const playPauseButton = document.createElement('button');
     playPauseButton.innerHTML = '⏯️'; // Play/Pause icon
-    playPauseButton.style.marginTop = '5px';
+    playPauseButton.style.marginTop = '50px';
     playPauseButton.addEventListener('click', () => {
         // Placeholder for play/pause functionality
     });
-
     timeLegend.appendChild(playPauseButton);
 
     return timeLegend;
