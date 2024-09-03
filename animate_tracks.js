@@ -20,6 +20,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return marker;
     });
 
+    let isPlaying = false;
+    let playbackInterval;
+
+    function updateSlider() {
+        if (slider.value < slider.max) {
+            slider.value = parseInt(slider.value) + 1;
+            slider.dispatchEvent(new Event('input'));
+        } else {
+            clearInterval(playbackInterval);
+            isPlaying = false;
+            playPauseButton.style.backgroundColor = '';
+            playPauseButton.innerHTML = '⏯️';
+        }
+    }
+
     slider.addEventListener('input', () => {
         const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
         const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
@@ -86,7 +101,16 @@ function createTimeLegend() {
     playPauseButton.innerHTML = '⏯️'; // Play/Pause icon
     playPauseButton.style.marginTop = '5px';
     playPauseButton.addEventListener('click', () => {
-        // Placeholder for play/pause functionality
+        if (isPlaying) {
+            clearInterval(playbackInterval);
+            playPauseButton.style.backgroundColor = '';
+            playPauseButton.innerHTML = '⏯️';
+        } else {
+            playbackInterval = setInterval(updateSlider, 100);
+            playPauseButton.style.backgroundColor = 'gray';
+            playPauseButton.innerHTML = '⏸️';
+        }
+        isPlaying = !isPlaying;
     });
     timeLegend.appendChild(playPauseButton);
 
