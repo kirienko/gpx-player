@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     slider.addEventListener('input', () => {
         const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
         const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
-        timeLegend.innerHTML = `Current Time: ${new Date(currentTime).toUTCString()}`;
+        timeLegend.timeDisplay.innerHTML = `${new Date(currentTime).toUTCString()}`;
 
         trackMarkers.forEach((marker, trackIndex) => {
             const track = gpx_points_data[trackIndex];
@@ -67,22 +67,31 @@ function createTimeLegend() {
         position: 'fixed',
         bottom: '50px',
         right: '10px',
-        backgroundColor: 'white',
-        padding: '10px',
-        border: '1px solid grey',
+        backgroundColor: ' rgba(0, 0, 0, 0.5)',
+        padding: '5px',
+        border: '1px solid white',
+        borderRadius: '5px',
         zIndex: 1000,
+        color: 'white',
     });
     timeLegend.style.display = 'flex';
     timeLegend.style.flexDirection = 'column';
     timeLegend.style.alignItems = 'center';
 
+    const timeDisplay = document.createElement('div');
+    timeDisplay.style.marginBottom = '2px';  // Add some space between the text and the button
+    timeLegend.appendChild(timeDisplay);
+
     const playPauseButton = document.createElement('button');
     playPauseButton.innerHTML = '⏯️'; // Play/Pause icon
-    playPauseButton.style.marginTop = '50px';
+    playPauseButton.style.marginTop = '5px';
     playPauseButton.addEventListener('click', () => {
         // Placeholder for play/pause functionality
     });
     timeLegend.appendChild(playPauseButton);
+
+    // Attach the timeDisplay to the legend object, so it can be accessed later
+    timeLegend.timeDisplay = timeDisplay;
 
     return timeLegend;
 }
