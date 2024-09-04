@@ -109,7 +109,7 @@ function updateTrackMarkers(slider, trackMarkers) {
 function updateTimeDisplay(slider, timeLegend) {
     const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
     const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
-    timeLegend.timeDisplay.innerHTML = `Current Time: ${new Date(currentTime).toUTCString()}`;
+    timeLegend.timeDisplay.innerHTML = `${new Date(currentTime).toUTCString()}`;
 }
 
 function updateSlider(slider) {

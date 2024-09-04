@@ -65,17 +65,16 @@ def speed_to_color(speed: float, max_speed: float) -> str:
 
 
 def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tuple[folium.Map, List[List], float, str]:
-    folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False)
+    folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False, tiles=None)
     map_id = folium_map.get_name()
 
-    folium.TileLayer('openstreetmap').add_to(folium_map)
+    folium.TileLayer('openstreetmap', control=False).add_to(folium_map)
     # Add OpenSeaMap layer directly to the map, not to the layer control
     folium.TileLayer(
         tiles='https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
         attr='OpenSeaMap',
-        name='OpenSeaMap',
         overlay=False,
-        control=False  # Set control to `False` to exclude from layer control
+        control=False,  # Set control to `False` to exclude from layer control
     ).add_to(folium_map)
 
     all_tracks = []
