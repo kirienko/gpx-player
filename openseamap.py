@@ -139,7 +139,9 @@ def add_animation(folium_map: folium.Map,
     var map_id = "{map_id}";
     document.title = "{title if title else 'GPX Player'}";
     </script>
-    <script src="animate_tracks.js"></script>
+    <script>                                                                                                                                                                                                                       
+    {open('animate_tracks.js').read()}                                                                                                                                                                                             
+    </script>
     """
     folium_map.get_root().html.add_child(folium.Element(animation_script))
 
