@@ -1,3 +1,5 @@
 gpxpy
+folium
+jinja2
 matplotlib
 pytz

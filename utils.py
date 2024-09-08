@@ -3,7 +3,6 @@ import math
 import re
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -28,6 +27,13 @@ def timedelta_to_hms(td: dt.timedelta) -> str:
     else:
         return f"{minutes:02}:{seconds:02}"
 
+def track_serializer(obj):
+    if isinstance(obj, dt.datetime):
+        return obj.isoformat()  # Convert datetime to an ISO 8601 string
+    elif isinstance(obj, dt.SimpleTZ):
+        return str(obj)  # Convert timezone info to a string
+    else:
+        raise TypeError(f"Type {type(obj)} not serializable")
 
 def decimal_to_dms(value: float) -> str:
     degrees = int(value)
