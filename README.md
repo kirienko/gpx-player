@@ -5,11 +5,25 @@ GPX Race Visualizer is a Python script to visualize the progression of multiple 
 It takes as input one or more GPX files and creates an animation showing the movement of each track over time. 
 This is a simple, open-source alternative to features like Strava's Flyby, which require an account and can have privacy issues.
 
+### Modes
+The player supports two modes:
+#### 1. "Video" mode
+Produce an `MP4` or a `GIF` file showing how the situation developed.
 For sailing races, it also calculates the distance covered after the 'start' signal and the current speed.
-
-## Example:
+##### Example:
 ![Example output](example.gif "Example of the script output")
 
+#### 2. Map mode
+Displays the track on OpenSeaMap.
+You can see the full tracks with colour-coded speeds, 
+and you can 'play' the tracks and see the markers move around the map.
+
+#### Example:
+Since GitHub Markdown doesn't allow embedding HTML, 
+you can see an [interactive example](https://kirienko.github.io/static/GinSul-2024.html) here.
+
+Screenshot:
+[![OPS Example](./example_osm.png)](https://kirienko.github.io/static/GinSul-2024.html)
 ## Installation
 
 Clone the repository and install the required dependencies with pip:
@@ -21,9 +35,15 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-To run the script, pass one or more GPX file paths as command-line arguments:
+To run the script producing `mp4`, pass one or more GPX file paths as command-line arguments:
 ```bash
 python main.py example-data/track1.gpx example-data/track2.gpx
+```
+To get a sea map, run the `openseamap.py`:
+```bash
+python openseamap.py --title 'Gin Sul Regatta 2024' --names Alex Yury Richard \
+     --files example-data/osm-demo-Alex.gpx example-data/osm-demo-Richard.gpx \
+             example-data/osm-demo-Yury.gpx
 ```
 
 A more sophisticated example, that produced a video above:
