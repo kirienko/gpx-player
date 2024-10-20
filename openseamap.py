@@ -24,13 +24,19 @@ def parse_arguments():
 def parse_gpx(file_path: str) -> List[dict]:
     with open(file_path, 'r') as gpx_file:
         gpx = gpxpy.parse(gpx_file)
-        points = [
-            {'lat': point.latitude, 'lon': point.longitude, 'time': point.time}
-            for track in gpx.tracks
-            for segment in track.segments
-            for point in segment.points
-        ]
-    return points
+        all_tracks = []
+        for track in gpx.tracks:
+            points = [
+                {'lat': point.latitude, 'lon': point.longitude, 'time': point.time}
+                for segment in track.segments
+                for point in segment.points
+            ]
+            all_tracks.append({
+                'name': track.name,
+                'description': track.description,
+                'points': points,
+                })
+    return all_tracks
 
 
 def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
@@ -78,10 +84,13 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
     ).add_to(folium_map)
 
     all_tracks = []
+    original_names = []
     for gpx_file in gpx_files:
-        points = parse_gpx(gpx_file)
-        speeds = calculate_speeds(points, max_speed)
-        all_tracks.append(list(zip(points, speeds)))
+        for track in parse_gpx(gpx_file):
+            points = track['points']
+            speeds = calculate_speeds(points, max_speed)
+            all_tracks.append(list(zip(points, speeds)))
+            original_names.append(track['name'])
 
     max_speed = max(s for track in all_tracks for _, s in track)
 
@@ -98,7 +107,7 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
         lat_lon = [(p['lat'], p['lon']) for p, _ in track]
         speeds = [s for _, s in track]
         times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p, _ in track]
-        name = names[i] if names and i < len(names) else gpx_files[i]
+        name = names[i] if names and i < len(names) else original_names[i]
 
         track_layer = folium.FeatureGroup(name=f"<span style='color:{color};'>&#9679;</span> {name}", show=True)
         for j in range(len(lat_lon) - 1):

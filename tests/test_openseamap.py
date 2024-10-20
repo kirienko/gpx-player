@@ -1,4 +1,3 @@
-import pytest
 import tempfile
 from openseamap import parse_gpx
 
@@ -22,7 +21,10 @@ def test_parse_gpx():
         temp_gpx.write(sample_gpx)
         temp_gpx_path = temp_gpx.name
 
-    points = parse_gpx(temp_gpx_path)
+    tracks = parse_gpx(temp_gpx_path)
+    points = tracks[0]['points']
+    name = tracks[0]['name']
+
     assert len(points) == 2
     assert points[0]['lat'] == 42.0
     assert points[0]['lon'] == -71.0
@@ -30,3 +32,4 @@ def test_parse_gpx():
     assert points[1]['lat'] == 42.1
     assert points[1]['lon'] == -71.1
     assert points[1]['time'].isoformat() == '2021-01-01T12:10:00+00:00'
+    assert name == 'Test Track'
