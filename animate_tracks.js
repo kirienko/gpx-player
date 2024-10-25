@@ -31,7 +31,7 @@ function createSlider() {
     slider.value = 0;
     Object.assign(slider.style, {
         position: 'fixed',
-        bottom: '20px',
+        bottom: '80px',
         left: '50%',
         transform: 'translateX(-50%)',
         width: '80%',
@@ -44,29 +44,29 @@ function createTimeLegend(slider) {
     const timeLegend = document.createElement('div');
     Object.assign(timeLegend.style, {
         position: 'fixed',
-        bottom: '50px',
-        right: '10px',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        bottom: '10px',
+        left: '80px',
         padding: '5px',
-        border: '1px solid white',
-        borderRadius: '5px',
         zIndex: 1000,
         color: 'white',
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
+        flexDirection: 'row',
+        alignItems: 'start',
     });
 
-    const timeDisplay = document.createElement('div');
-    timeDisplay.style.marginBottom = '2px';
-    timeLegend.appendChild(timeDisplay);
-
     const playPauseButton = document.createElement('button');
-    playPauseButton.innerHTML = '⏯️'; // Play/Pause icon
-    playPauseButton.style.marginTop = '5px';
+    playPauseButton.innerHTML = '⏵'; // Play/Pause icon
+    playPauseButton.style.marginRight = '10px';
+    playPauseButton.style.fontSize = '2em';
+    playPauseButton.style.padding = '0 .5em';
+    playPauseButton.style.border = 'none';
     playPauseButton.addEventListener('click', () => togglePlayPause(slider, playPauseButton));
-
     timeLegend.appendChild(playPauseButton);
+
+    const timeDisplay = document.createElement('div');
+    timeDisplay.style.textShadow = '#000 0 0 5px';
+
+    timeLegend.appendChild(timeDisplay);
 
     timeLegend.timeDisplay = timeDisplay;
 
@@ -131,15 +131,13 @@ function togglePlayPause(slider, playPauseButton) {
         isPlaying = false;  // Ensure isPlaying is set to false when paused
     } else {
         playbackInterval = setInterval(() => updateSlider(slider), 100);
-        playPauseButton.style.backgroundColor = 'gray';
-        playPauseButton.innerHTML = '⏸️';
+        playPauseButton.innerHTML = '⏸';
         isPlaying = true;  // Set isPlaying to true when playback starts
     }
 }
 
 function resetPlayPauseButton() {
     const playPauseButton = document.querySelector('button');
-    playPauseButton.style.backgroundColor = '';
-    playPauseButton.innerHTML = '⏯️';
+    playPauseButton.innerHTML = '⏵';
 }
 
