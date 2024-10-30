@@ -2,4 +2,5 @@ gpxpy
 folium
 jinja2
 matplotlib
+pytest-cov
 pytz
