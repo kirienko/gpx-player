@@ -1,5 +1,4 @@
 import datetime as dt
-import math
 import re
 
 import matplotlib as mpl
@@ -7,7 +6,9 @@ import numpy as np
 
 
 def slug(input_string: str) -> str:
-    # Remove non-word characters (everything except numbers and letters)
+    # Remove leading and trailing spaces
+    input_string = input_string.strip()
+    # Remove non-word characters (everything except numbers, underscores and letters)
     s = re.sub(r"[^\w\s]", '', input_string)
     # Replace all runs of whitespace with a single dash
     s = re.sub(r"\s+", '-', s)

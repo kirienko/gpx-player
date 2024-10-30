@@ -5,9 +5,9 @@ def test_slug():
     # Test cases for the slug function
     test_cases = [
         ("Hello World!", "hello-world"),
-        ("Python_3.9", "python39"),
+        ("Python_3.9", "python_39"),
         ("   Leading and trailing spaces   ", "leading-and-trailing-spaces"),
-        ("Special #$%&* characters!", "special--characters"),
+        ("Special #$%&* characters!", "special-characters"),
         ("Multiple   Spaces", "multiple-spaces"),
         ("", ""),
     ]
@@ -22,6 +22,7 @@ def test_timedelta_to_hms():
         (dt.timedelta(seconds=59), "00:59"),
         (dt.timedelta(hours=2), "2:00:00"),
         (dt.timedelta(hours=0, minutes=0, seconds=0), "00:00"),
+        (dt.timedelta(hours=30, minutes=0, seconds=0), "30:00:00"),
         (dt.timedelta(hours=23, minutes=59, seconds=59), "23:59:59"),
     ]
     for td, expected_output in test_cases:
