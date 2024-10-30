@@ -1,5 +1,5 @@
 import tempfile
-from openseamap import parse_gpx
+from openseamap import parse_gpx, speed_to_color
 
 def test_parse_gpx():
     sample_gpx = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -33,3 +33,19 @@ def test_parse_gpx():
     assert points[1]['lon'] == -71.1
     assert points[1]['time'].isoformat() == '2021-01-01T12:10:00+00:00'
     assert name == 'Test Track'
+
+def test_speed_to_color():
+    # Test cases for speed_to_color function
+    max_speed = 12.0
+    speeds = [0, 3, 6, 9, 12]  # Speeds within max_speed
+
+    for speed in speeds:
+        color = speed_to_color(speed, max_speed)
+        assert isinstance(color, str)
+        # Optionally, check that the color string is in the correct format
+        assert color.startswith('rgba(')
+
+    # Test speed exceeding max_speed
+    color = speed_to_color(15, max_speed)
+    assert isinstance(color, str)
+    assert color.startswith('rgba(')
