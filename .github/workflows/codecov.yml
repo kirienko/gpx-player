@@ -27,9 +27,12 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        pytest --cov=. --cov-report=xml tests/
+        pytest --cov=./ --cov-report=xml tests/
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+        file: ./coverage.xml
+        verbose: true
