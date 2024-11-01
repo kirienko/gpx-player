@@ -67,7 +67,7 @@ def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
 def speed_to_color(speed: float, max_speed: float) -> str:
     norm_speed = min(speed / max_speed, 1.0)
     color = plt.cm.RdYlGn(norm_speed)
-    return f"rgba({int(color[0] * 255)}, {int(color[1] * 255)}, {int(color[2] * 255)}, {color[3]})"
+    return f"#{int(color[0] * 255):x}{int(color[1] * 255):x}{int(color[2] * 255):x}"
 
 
 def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tuple[folium.Map, List[List], float, str]:
@@ -148,7 +148,7 @@ def add_animation(folium_map: folium.Map,
     document.title = "{title if title else 'GPX Player'}";
     </script>
     <script>                                                                                                                                                                                                                       
-    {open('animate_tracks.js').read()}                                                                                                                                                                                             
+    {open('animate_tracks.js', encoding='UTF-8').read()}                                                                                                                                                                                             
     </script>
     """
     folium_map.get_root().html.add_child(folium.Element(animation_script))
