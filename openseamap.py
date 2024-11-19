@@ -22,7 +22,7 @@ def parse_arguments():
     parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
     parser.add_argument('--max-speed', '-ms', type=float, default=12, help='Maximum speed in knots (default: 12)')
     parser.add_argument('--title', '-t', help='The title of the page')
-    parser.add_argument('--marks', '-m', help='The file with the static marks to put onto the map. One pair of coordinates per line')
+    parser.add_argument('--marks', '-m', help='The file with the static marks to put onto the map. One pair of coordinates per line, followed by mark name')
     return parser.parse_args()
 
 
