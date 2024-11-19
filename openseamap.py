@@ -11,31 +11,60 @@ from jinja2 import Environment, FileSystemLoader
 
 from utils import track_serializer
 
+from pathlib import Path
+from datetime import datetime
+import csv
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Animate GPX tracks on an OpenSeaMap.")
-    parser.add_argument('--files', nargs='+', required=True, help='GPX files to process')
+    parser.add_argument('--files', nargs='+', required=True, help='GPX/CSV files to process')
     parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
     parser.add_argument('--max-speed', '-ms', type=float, default=12, help='Maximum speed in knots (default: 12)')
     parser.add_argument('--title', '-t', help='The title of the page')
+    parser.add_argument('--marks', '-m', help='The file with the static marks to put onto the map. One pair of coordinates per line')
     return parser.parse_args()
 
 
 def parse_gpx(file_path: str) -> List[dict]:
-    with open(file_path, 'r') as gpx_file:
-        gpx = gpxpy.parse(gpx_file)
-        all_tracks = []
-        for track in gpx.tracks:
-            points = [
-                {'lat': point.latitude, 'lon': point.longitude, 'time': point.time}
-                for segment in track.segments
-                for point in segment.points
-            ]
+    if Path(file_path).suffix.lower() == '.csv':
+        # TODO autodetect CSV fields lat instead of latitude, time instead of timestamp etc
+        # print(f'Parsing CSV {file_path}')
+        with open(file_path, 'r') as csv_file:
+            # one track only per csv
+            all_tracks = []
+            points = []
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                try:
+                    timestamp = datetime.strptime(row['timestamp'],"%Y-%m-%dT%H:%M:%S.%f%z")
+                except ValueError:
+                    timestamp = datetime.strptime(row['timestamp'],"%Y-%m-%dT%H:%M:%S.%f")
+                points.append({
+                    'lat': float(row['latitude']),
+                    'lon': float(row['longitude']),
+                    'time': timestamp,
+                })
             all_tracks.append({
-                'name': track.name,
-                'description': track.description,
+                'name': file_path,
+                'description': '',
                 'points': points,
                 })
+    else:
+        with open(file_path, 'r') as gpx_file:
+            gpx = gpxpy.parse(gpx_file)
+            all_tracks = []
+            for track in gpx.tracks:
+                points = [
+                    {'lat': point.latitude, 'lon': point.longitude, 'time': point.time}
+                    for segment in track.segments
+                    for point in segment.points
+                ]
+                all_tracks.append({
+                    'name': track.name,
+                    'description': track.description,
+                    'points': points,
+                    })
     return all_tracks
 
 
@@ -70,9 +99,23 @@ def speed_to_color(speed: float, max_speed: float) -> str:
     return f"#{int(color[0] * 255):x}{int(color[1] * 255):x}{int(color[2] * 255):x}"
 
 
-def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tuple[folium.Map, List[List], float, str]:
+def create_map(gpx_files: List[str], names: List[str], max_speed: float, marks: List[List] = []) -> Tuple[folium.Map, List[List], float, str]:
     folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False, tiles=None)
     map_id = folium_map.get_name()
+
+    if marks:
+        for i, mark in enumerate(marks, 1):
+            # print('Mark:', mark, i)
+            try:
+                mark_desc = mark[2]
+            except IndexError:
+                mark_desc = f"Mark{i}"
+            folium.Marker(
+                location=[float(mark[0]), float(mark[1])],
+                tooltip=mark_desc,
+                popup=mark_desc,
+                icon=folium.Icon(icon="map-marker"),
+            ).add_to(folium_map)
 
     folium.TileLayer('openstreetmap', control=False).add_to(folium_map)
     # Add OpenSeaMap layer directly to the map, not to the layer control
@@ -170,9 +213,15 @@ def main():
     gpx_files = args.files
     names = args.names
 
+    if args.marks:
+        with open(args.marks) as fd:
+            marks = [line.strip().split(',') for line in fd.readlines()]
+    else:
+        marks = []
+
     env = Environment(loader=FileSystemLoader('.'))
 
-    folium_map, all_tracks, max_speed, map_id = create_map(gpx_files, names, args.max_speed)
+    folium_map, all_tracks, max_speed, map_id = create_map(gpx_files, names, args.max_speed, marks=marks)
     add_animation(folium_map, all_tracks, env, args.title, map_id)
 
     add_legend(folium_map, max_speed, env)

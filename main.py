@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import pytz
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 
-from utils import (format_func, gen_arrow_head_marker, haversine_distance,
+from utils import (format_func, gen_arrow_head_marker,
                    km_to_nm, slug, timedelta_to_hms)
 
 local_tz = pytz.timezone('Europe/Berlin')
@@ -118,7 +118,7 @@ def update(current_time, points_list, lines, heads, time_text):
                     # Calculate the distance between two consecutive points and add it to dist_counter
                     lat1, lon1, t1 = points[counter-1]
                     lat2, lon2, t2 = points[counter]
-                    dst = haversine_distance(lat1, lon1, lat2, lon2)
+                    dst = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2)
                     dist_counter[idx] += dst
                     speeds[idx] = km_to_nm(dst)/(t2-t1).total_seconds()*3600
                 elif counter > 0 and points[counter][2] < (race_start or start_time):
