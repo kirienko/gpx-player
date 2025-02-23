@@ -63,6 +63,7 @@ python main.py example-data/track1.gpx example-data/track2.gpx example-data/trac
 * `--names` or `-n`: Names of the participants
 * `--marks`or`-m`: The file with the static marks to put onto the map. One pair of coordinates per line, see below.
 * `--gif` or `-g`: Save as GIF moving picture instead of MP4
+* `--timezone` or `-tz`: Local timezone to use for processing timestamps, e.g. `America/Los_Angeles`, see [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (default: `Europe/Berlin`).
 
 ## Marks
 The script also supports visualizing predefined marks on the map, which can be useful for events like sailing regattas.

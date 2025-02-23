@@ -12,8 +12,6 @@ from matplotlib.ticker import FuncFormatter, MultipleLocator
 from utils import (format_func, gen_arrow_head_marker,
                    km_to_nm, slug, timedelta_to_hms)
 
-local_tz = pytz.timezone('Europe/Berlin')
-
 base_path = '.'
 
 # Define argument parser
@@ -27,8 +25,9 @@ parser.add_argument('--race_start', '-r', type=lambda s: dt.datetime.strptime(s,
 parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
 parser.add_argument('--marks', '-m', help='The file with the static marks to put onto the map. One pair of coordinates per line')
 parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving picture instead of MP4')
-
+parser.add_argument('--timezone', '-tz', default='Europe/Berlin', help='Timezone to use for processing timestamps')
 args = parser.parse_args()
+local_tz = pytz.timezone(args.timezone)
 
 start_time = args.start.astimezone(local_tz) if args.start else None
 end_time = args.end.astimezone(local_tz) if args.end else None
