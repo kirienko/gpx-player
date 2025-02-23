@@ -118,7 +118,8 @@ def update(current_time, points_list, lines, heads, time_text):
                     # Calculate the distance between two consecutive points and add it to dist_counter
                     lat1, lon1, t1 = points[counter-1]
                     lat2, lon2, t2 = points[counter]
-                    dst = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2)
+                    # gpxpy.geo.haversine_distance returns meters
+                    dst = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2) / 1000  # in km
                     dist_counter[idx] += dst
                     speeds[idx] = km_to_nm(dst)/(t2-t1).total_seconds()*3600
                 elif counter > 0 and points[counter][2] < (race_start or start_time):
