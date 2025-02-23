@@ -30,9 +30,9 @@ parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving
 
 args = parser.parse_args()
 
-start_time = args.start.replace(tzinfo=local_tz) if args.start else None
-end_time = args.end.replace(tzinfo=local_tz) if args.end else None
-race_start = args.race_start.replace(tzinfo=local_tz) if args.race_start else None
+start_time = args.start.astimezone(local_tz) if args.start else None
+end_time = args.end.astimezone(local_tz) if args.end else None
+race_start = args.race_start.astimezone(local_tz) if args.race_start else None
 
 tracks = []
 points_list = []

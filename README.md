@@ -49,15 +49,15 @@ python openseamap.py --title 'Gin Sul Regatta 2024' --names Alex Yury Richard \
 A more sophisticated example, that produced a video above:
 ```bash
 python main.py example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
-       --start 2023-07-01T10:53:00+0200 \
+       --start 2023-07-01T10:53:00+0000 \
        --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
        --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
-       --race_start 2023-07-01T10:58:00+0200 --marks example-data/marks.txt -g
+       --race_start 2023-07-01T10:58:00+0000 --marks example-data/marks.txt -g
 ```
 ### Additional parameters:
 * `--title` or `-t`: The title of the video
-* `--start` or `-s`: start time in the format `2023-06-30T10:53:00+0200`, all points _before_ that will not be plotted
-* `--end` or `-e`: end time in the format `2023-06-30T11:53:00+0200`, all points _after_ that will not be plotted
+* `--start` or `-s`: start time in the format `2023-06-30T12:53:00+0200`, all points _before_ that will not be plotted
+* `--end` or `-e`: end time in the format `2023-06-30T13:53:00+0200`, all points _after_ that will not be plotted
 * `--names` or `-n`: names of the participants (otherwise the file names will be used in the legend)
 * `--race_start`, `-r`: Race start time in the format `YYYY-MM-DDTHH:MM:SS%z`, e.g. `2023-07-01T12:29:00+0200`
 * `--names` or `-n`: Names of the participants
