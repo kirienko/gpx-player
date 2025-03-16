@@ -83,6 +83,49 @@ GPX files can be obtained from several GPS-tracking services:
 * Garmin Connect: Open the activity, go to the gear icon and select "Export to GPX".
 * Endomondo: From the workout page, click the three-dot menu icon and select "Export". Then choose "GPX".
 
+## GPX Validation
+
+For the `gpx-player` to work properly, it needs the correct GPX files.
+You can verify that you are inputting the correct file by using the special validator 
+included in this package.
+
+The `validator.py` script is a command-line utility and module for validating GPX files. 
+It checks for XML schema conformance and timestamp consistency, 
+supporting both strict and lenient modes. 
+Errors are raised as `GPXValidationError` which can be caught in Python code. 
+To run as a CLI tool, use:
+```bash
+python validator.py path/to/yourfile.gpx --strict
+```
+
+The `--strict` parameter is optional. In most cases you do not need it, 
+because files that strictly correspond to the GPX schema are rare. 
+For example, almost all modern files contain coordinates, elevations and time stamps 
+with more decimal places than originally planned.
+
+Also, to better understand your GPX file, you can use the `gpxinfo` console command 
+that comes with `gpxpy`. If you are already using the player, you have it:
+
+```bash
+$ gpxinfo example-data/osm_track1.gpx 
+File: example-data/osm_track1.gpx
+    Waypoints: 0
+    Routes: 0
+    Length 2D: 9.621km
+    Length 3D: 9.648km
+    Moving time: 01:05:22
+    Stopped time: n/a
+    Max speed: 3.12m/s = 11.22km/h
+    Avg speed: 2.46m/s = 8.85km/h
+    Total uphill: 97.20m
+    Total downhill: 98.40m
+    Started: 2024-07-24 15:59:05+00:00
+    Ended: 2024-07-24 17:04:27+00:00
+    Points: 776
+    Avg distance between points: 12.40m
+
+```
+
 ## Support
 Now you can buy me a coffee to encourage further development!
 

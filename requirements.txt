@@ -1,6 +1,9 @@
 gpxpy
 folium
 jinja2
+lxml
 matplotlib
+numpy
 pytest-cov
+pytest
 pytz
