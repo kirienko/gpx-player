@@ -66,6 +66,7 @@ def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
 
 def speed_to_color(speed: float, max_speed: float) -> str:
     norm_speed = min(speed / max_speed, 1.0)
+    # norm_speed = min(speed / max(1,max_speed), 1.0)
     color = plt.cm.RdYlGn(norm_speed)
     return f"#{int(color[0] * 255):x}{int(color[1] * 255):x}{int(color[2] * 255):x}"
 

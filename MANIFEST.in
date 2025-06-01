@@ -1,0 +1,2 @@
+recursive-include schema *.xsd
+include *.html *.js
