@@ -26,9 +26,5 @@ gpx-player  = "main:main"
 gpx-validate = "validator:main"
 
 [tool.setuptools]
-# code lives at repo root, so:
-packages = [""]                # include all top-level Python modules
+py-modules = ["main", "openseamap", "gpx_utils", "utils", "validator"]
 include-package-data = true
-
-[tool.setuptools.package-data] # ship non-.py assets
-"" = ["*.html", "*.js", "schema/*.xsd"]
