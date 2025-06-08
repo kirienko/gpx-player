@@ -42,7 +42,11 @@ def test_speed_to_color():
     for speed in speeds:
         color = speed_to_color(speed, max_speed)
         assert isinstance(color, str)
+        assert color.startswith("#")
+        assert len(color) == 7
 
     # Test speed exceeding max_speed
     color = speed_to_color(15, max_speed)
     assert isinstance(color, str)
+    assert color.startswith("#")
+    assert len(color) == 7
