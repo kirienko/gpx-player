@@ -26,8 +26,12 @@ Screenshot:
 [![OPS Example](./example_osm.png)](https://kirienko.github.io/static/GinSul-2024.html)
 ## Installation
 
-Clone the repository and install the required dependencies with pip:
+Install directly from PyPI using pip:
+```bash
+pip install gpx-player
+```
 
+Alternatively, clone the repository and install the required dependencies manually:
 ```bash
 git clone https://github.com/kirienko/gpx-player.git
 cd gpx-player
