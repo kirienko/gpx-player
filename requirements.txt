@@ -1,9 +1,12 @@
-gpxpy
+diskcache
 folium
+gpxpy
+httpx
 jinja2
 lxml
 matplotlib
 numpy
-pytest-cov
 pytest
+pytest-asyncio
+pytest-cov
 pytz

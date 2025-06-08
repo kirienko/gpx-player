@@ -2,3 +2,5 @@ data/
 run.json
 .aider*
 .env
+__pycache__/
+tests/__pycache__/

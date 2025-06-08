@@ -19,6 +19,9 @@ dependencies = [
   "lxml",
   "numpy",
   "gpxpy",
+  "httpx",
+  "diskcache",
+  "pytest-asyncio",
 ]
 
 [project.scripts]              # CLI entry-points after `pip install gpx-player`
@@ -26,5 +29,5 @@ gpx-player  = "main:main"
 gpx-validate = "validator:main"
 
 [tool.setuptools]
-py-modules = ["main", "openseamap", "gpx_utils", "utils", "validator"]
+py-modules = ["main", "openseamap", "gpx_utils", "utils", "validator", "wind.source_openmeteo", "wind.cache"]
 include-package-data = true

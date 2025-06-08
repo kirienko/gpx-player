@@ -13,10 +13,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const map = window[map_id];
 
     const trackMarkers = initializeTrackMarkers(map);
+    if (typeof initWindToggle === 'function') {
+        initWindToggle(map);
+    }
 
     slider.addEventListener('input', () => {
         updateTrackMarkers(slider, trackMarkers);
         updateTimeDisplay(slider, timeLegend);
+        const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
+        const currentTime = gpx_timestamps[timeIndex];
+        if (typeof updateWindLayer === 'function') {
+            updateWindLayer(currentTime, map);
+        }
     });
 
     // Initialize with the first timestamp
