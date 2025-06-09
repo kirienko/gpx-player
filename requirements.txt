@@ -1,4 +1,5 @@
 diskcache
+fastapi
 folium
 gpxpy
 httpx
@@ -10,3 +11,4 @@ pytest
 pytest-asyncio
 pytest-cov
 pytz
+uvicorn

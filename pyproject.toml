@@ -21,7 +21,9 @@ dependencies = [
   "gpxpy",
   "httpx",
   "diskcache",
+  "fastapi",
   "pytest-asyncio",
+  "uvicorn",
 ]
 
 [project.scripts]              # CLI entry-points after `pip install gpx-player`
@@ -29,5 +31,14 @@ gpx-player  = "main:main"
 gpx-validate = "validator:main"
 
 [tool.setuptools]
-py-modules = ["main", "openseamap", "gpx_utils", "utils", "validator", "wind.source_openmeteo", "wind.cache"]
+py-modules = [
+    "main",
+    "openseamap",
+    "gpx_utils",
+    "utils",
+    "validator",
+    "wind.source_openmeteo",
+    "wind.cache",
+    "wind.server",
+]
 include-package-data = true
