@@ -1,6 +1,8 @@
 import gpxpy
 import gpxpy.gpx
 from datetime import datetime
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 def cut_gpx_file(file_path, timestamp, cut_type):
     """
@@ -36,3 +38,35 @@ def cut_gpx_file(file_path, timestamp, cut_type):
         f.write(new_gpx.to_xml())
 
     return new_file_path
+
+
+def remove_extensions_tags(file_path: str) -> tuple[str, int]:
+    """Remove all ``<extensions>...</extensions>`` blocks from a GPX file.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the input GPX file.
+
+    Returns
+    -------
+    tuple[str, int]
+        A tuple containing the path to the cleaned GPX file and the number of
+        ``<extensions>`` tags removed.
+    """
+
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+    removed = 0
+
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag.endswith("extensions"):
+                parent.remove(child)
+                removed += 1
+
+    path = Path(file_path)
+    new_name = path.stem + "_noext.gpx"
+    new_path = str(path.with_name(new_name))
+    tree.write(new_path, encoding="utf-8", xml_declaration=True)
+    return new_path, removed
