@@ -130,6 +130,22 @@ File: example-data/osm_track1.gpx
 
 ```
 
+## GPX Cleanup
+
+For convenience, the repository provides `clean_gpx.py`. This utility first
+validates a GPX file using `validator.py` and then removes all `<extensions>`
+blocks using :func:`remove_extensions_tags` from `gpx_utils`. The cleaned file is
+saved alongside the original with `_noext` appended to its name.
+
+Run it from the command line as follows:
+
+```bash
+python clean_gpx.py path/to/yourfile.gpx
+```
+
+If validation fails, the command exits with an error message. The output reports
+how many extension blocks were removed.
+
 ## Support
 Now you can buy me a coffee to encourage further development!
 
