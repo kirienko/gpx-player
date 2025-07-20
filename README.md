@@ -16,7 +16,7 @@ For sailing races, it also calculates the distance covered after the 'start' sig
 #### 2. Map mode
 Displays the track on OpenSeaMap.
 You can see the full tracks with colour-coded speeds,
-and you can 'play' the tracks and see the markers move around the map. While playing, a legend shows each boat's current speed (in knots) and distance travelled (in nautical miles).
+and you can 'play' the tracks and see the markers move around the map. While playing, a legend shows each boat's distance travelled (in nautical miles), current speed (in knots), and average speed in knots.
 
 #### Example:
 Since GitHub Markdown doesn't allow embedding HTML, 

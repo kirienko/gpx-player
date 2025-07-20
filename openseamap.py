@@ -76,6 +76,19 @@ def accumulate_distances(points: List[dict]) -> List[float]:
     return distances
 
 
+def calculate_average_speeds(points: List[dict], distances: List[float]) -> List[float]:
+    """Return average speed in knots for each point."""
+    avgs = [0.0]
+    start_time = points[0]['time']
+    for i in range(1, len(points)):
+        hours = (points[i]['time'] - start_time).total_seconds() / 3600.0
+        if hours > 0:
+            avgs.append(distances[i] / hours)
+        else:
+            avgs.append(0.0)
+    return avgs
+
+
 def speed_to_color(speed: float, max_speed: float) -> str:
     norm_speed = min(speed / max_speed, 1.0)
     # norm_speed = min(speed / max(1,max_speed), 1.0)
@@ -107,12 +120,14 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
             points = track['points']
             seg_speeds = calculate_speeds(points, max_speed)
             distances = accumulate_distances(points)
+            avg_speeds = calculate_average_speeds(points, distances)
             point_speeds = [0.0] + seg_speeds
             all_tracks.append({
                 'name': track['name'],
                 'points': points,
                 'point_speeds': point_speeds,
                 'distances': distances,
+                'avg_speeds': avg_speeds,
                 'seg_speeds': seg_speeds,
             })
             original_names.append(track['name'])
@@ -160,6 +175,7 @@ def add_animation(folium_map: folium.Map,
     gpx_points_data = [track['points'] for track in all_tracks]
     gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
     gpx_distances_data = [track['distances'] for track in all_tracks]
+    gpx_avg_speeds_data = [track['avg_speeds'] for track in all_tracks]
     track_names = [track['name'] for track in all_tracks]
     gpx_timestamps = sorted({p['time'] for track in all_tracks for p in track['points']})
     min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
@@ -170,6 +186,7 @@ def add_animation(folium_map: folium.Map,
     var gpx_points_data = {json.dumps(gpx_points_data, default=track_serializer)};
     var gpx_speeds_data = {json.dumps(gpx_speeds_data)};
     var gpx_distances_data = {json.dumps(gpx_distances_data)};
+    var gpx_avg_speeds_data = {json.dumps(gpx_avg_speeds_data)};
     var track_names = {json.dumps(track_names)};
     var gpx_timestamps = {json.dumps([t for t in gpx_timestamps], default=track_serializer)};
     var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();

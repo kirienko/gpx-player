@@ -128,6 +128,7 @@ function updateBoatLegend(slider, legend) {
         const track = gpx_points_data[idx];
         const speeds = gpx_speeds_data[idx];
         const dists = gpx_distances_data[idx];
+        const avgs = gpx_avg_speeds_data[idx];
         let pointIndex = 0;
         for (let i = 1; i < track.length; i++) {
             const pointTime = new Date(track[i].time).getTime();
@@ -139,6 +140,7 @@ function updateBoatLegend(slider, legend) {
         }
         entry.querySelector('.distance').textContent = `${dists[pointIndex].toFixed(1)} nm`;
         entry.querySelector('.speed').textContent = `${speeds[pointIndex].toFixed(1)} kt`;
+        entry.querySelector('.avg-speed').textContent = `${avgs[pointIndex].toFixed(1)} kt`;
     });
 }
 
