@@ -40,13 +40,18 @@ def cut_gpx_file(file_path, timestamp, cut_type):
     return new_file_path
 
 
-def remove_extensions_tags(file_path: str) -> tuple[str, int]:
+def remove_extensions_tags(file_path: str, overwrite: bool = False) -> tuple[str, int]:
     """Remove all ``<extensions>...</extensions>`` blocks from a GPX file.
 
     Parameters
     ----------
     file_path : str
         Path to the input GPX file.
+
+    overwrite : bool, optional
+        If ``True``, the original file will be overwritten. Otherwise a new
+        file with ``_noext`` appended to the name will be created. Default is
+        ``False``.
 
     Returns
     -------
@@ -66,7 +71,11 @@ def remove_extensions_tags(file_path: str) -> tuple[str, int]:
             parent.remove(node)
 
     path = Path(file_path)
-    new_name = path.stem + "_noext.gpx"
-    new_path = str(path.with_name(new_name))
-    tree.write(new_path, encoding="utf-8", xml_declaration=True)
-    return new_path, removed
+    if overwrite:
+        new_path = path
+    else:
+        new_name = path.stem + "_noext.gpx"
+        new_path = path.with_name(new_name)
+
+    tree.write(str(new_path), encoding="utf-8", xml_declaration=True)
+    return str(new_path), removed

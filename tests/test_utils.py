@@ -70,3 +70,16 @@ def test_remove_extensions_tags_preserve_namespace(tmp_path):
         second = f.readline()
 
     assert "<ns0:gpx" not in second
+
+
+def test_remove_extensions_tags_overwrite(tmp_path):
+    src = Path("example-data/track1.gpx")
+    dst = tmp_path / src.name
+    shutil.copy(src, dst)
+
+    cleaned, removed = remove_extensions_tags(str(dst), overwrite=True)
+
+    assert removed == 511
+    assert cleaned == str(dst)
+    with open(dst) as f:
+        assert "<extensions>" not in f.read()
