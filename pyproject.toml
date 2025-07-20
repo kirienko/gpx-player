@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpx-player"
-version = "0.1.0"
+version = "0.1.2"
 description = "Visualise & animate GPX race tracks."
 readme = "README.md"
 license = {file = "LICENSE"}
