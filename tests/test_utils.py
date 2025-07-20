@@ -56,3 +56,17 @@ def test_remove_extensions_tags_noop(tmp_path):
     assert count == 0
     with open(cleaned) as f:
         assert "<extensions>" not in f.read()
+
+
+def test_remove_extensions_tags_preserve_namespace(tmp_path):
+    src = Path("example-data/track1.gpx")
+    dst = tmp_path / src.name
+    shutil.copy(src, dst)
+
+    cleaned, _ = remove_extensions_tags(str(dst))
+
+    with open(cleaned) as f:
+        f.readline()  # XML declaration
+        second = f.readline()
+
+    assert "<ns0:gpx" not in second

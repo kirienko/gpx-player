@@ -1,7 +1,7 @@
 import gpxpy
 import gpxpy.gpx
 from datetime import datetime
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 from pathlib import Path
 
 def cut_gpx_file(file_path, timestamp, cut_type):
@@ -57,13 +57,13 @@ def remove_extensions_tags(file_path: str) -> tuple[str, int]:
 
     tree = ET.parse(file_path)
     root = tree.getroot()
-    removed = 0
 
-    for parent in root.iter():
-        for child in list(parent):
-            if child.tag.endswith("extensions"):
-                parent.remove(child)
-                removed += 1
+    extensions = root.xpath('//*[local-name()="extensions"]')
+    removed = len(extensions)
+    for node in extensions:
+        parent = node.getparent()
+        if parent is not None:
+            parent.remove(node)
 
     path = Path(file_path)
     new_name = path.stem + "_noext.gpx"
