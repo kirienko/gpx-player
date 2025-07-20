@@ -64,6 +64,18 @@ def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
     return speeds
 
 
+def accumulate_distances(points: List[dict]) -> List[float]:
+    """Return cumulative distance in nautical miles for each point."""
+    distances = [0.0]
+    total = 0.0
+    for i in range(1, len(points)):
+        lat1, lon1 = points[i - 1]['lat'], points[i - 1]['lon']
+        lat2, lon2 = points[i]['lat'], points[i]['lon']
+        total += gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2) / 1852.0
+        distances.append(total)
+    return distances
+
+
 def speed_to_color(speed: float, max_speed: float) -> str:
     norm_speed = min(speed / max_speed, 1.0)
     # norm_speed = min(speed / max(1,max_speed), 1.0)
@@ -93,15 +105,23 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
     for gpx_file in gpx_files:
         for track in parse_gpx(gpx_file):
             points = track['points']
-            speeds = calculate_speeds(points, max_speed)
-            all_tracks.append(list(zip(points, speeds)))
+            seg_speeds = calculate_speeds(points, max_speed)
+            distances = accumulate_distances(points)
+            point_speeds = [0.0] + seg_speeds
+            all_tracks.append({
+                'name': track['name'],
+                'points': points,
+                'point_speeds': point_speeds,
+                'distances': distances,
+                'seg_speeds': seg_speeds,
+            })
             original_names.append(track['name'])
 
-    max_speed = max(s for track in all_tracks for _, s in track)
+    max_speed = max(s for track in all_tracks for s in track['seg_speeds'])
 
     # Calculate map bounds
-    latitudes = [p['lat'] for track in all_tracks for p, _ in track]
-    longitudes = [p['lon'] for track in all_tracks for p, _ in track]
+    latitudes = [p['lat'] for track in all_tracks for p in track['points']]
+    longitudes = [p['lon'] for track in all_tracks for p in track['points']]
     folium_map.fit_bounds([[min(latitudes), min(longitudes)], [max(latitudes), max(longitudes)]])
 
     track_layers = []
@@ -109,9 +129,9 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
     
     for i, track in enumerate(all_tracks):
         color = colors[i % len(colors)]
-        lat_lon = [(p['lat'], p['lon']) for p, _ in track]
-        speeds = [s for _, s in track]
-        times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p, _ in track]
+        lat_lon = [(p['lat'], p['lon']) for p in track['points']]
+        speeds = track['seg_speeds']
+        times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p in track['points']]
         name = names[i] if names and i < len(names) else original_names[i]
 
         track_layer = folium.FeatureGroup(name=f"<span style='color:{color};'>&#9679;</span> {name}", show=True)
@@ -134,17 +154,23 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
 
 
 def add_animation(folium_map: folium.Map,
-                  all_tracks: List[List],
+                  all_tracks: List[dict],
                   jinja_env: jinja2.Environment,
-                  title: str, map_id:str) -> None:
-    gpx_points_data = [[point[0] for point in track] for track in all_tracks]
-    gpx_timestamps = sorted(set(point[0]['time'] for track in all_tracks for point in track))
+                  title: str, map_id: str) -> None:
+    gpx_points_data = [track['points'] for track in all_tracks]
+    gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
+    gpx_distances_data = [track['distances'] for track in all_tracks]
+    track_names = [track['name'] for track in all_tracks]
+    gpx_timestamps = sorted({p['time'] for track in all_tracks for p in track['points']})
     min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
     time_range = (max_time - min_time).total_seconds()
 
     animation_script = f"""
     <script>
     var gpx_points_data = {json.dumps(gpx_points_data, default=track_serializer)};
+    var gpx_speeds_data = {json.dumps(gpx_speeds_data)};
+    var gpx_distances_data = {json.dumps(gpx_distances_data)};
+    var track_names = {json.dumps(track_names)};
     var gpx_timestamps = {json.dumps([t for t in gpx_timestamps], default=track_serializer)};
     var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();
     var max_time = new Date('{max_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();
@@ -170,6 +196,13 @@ def add_legend(folium_map: folium.Map, max_speed: float, jinja_env: jinja2.Envir
     folium_map.get_root().html.add_child(folium.Element(legend_html))
 
 
+def add_boat_legend(folium_map: folium.Map, names: List[str], jinja_env: jinja2.Environment) -> None:
+    colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
+    template = jinja_env.get_template('boat_legend_template.html')
+    legend_html = template.render(names=names, colors=colors)
+    folium_map.get_root().html.add_child(folium.Element(legend_html))
+
+
 def main():
     args = parse_arguments()
     gpx_files = args.files
@@ -181,6 +214,7 @@ def main():
     add_animation(folium_map, all_tracks, env, args.title, map_id)
 
     add_legend(folium_map, max_speed, env)
+    add_boat_legend(folium_map, names if names else [t['name'] for t in all_tracks], env)
 
     folium_map.save('boat_tracks.html')
     print('Map has been saved to boat_tracks.html')

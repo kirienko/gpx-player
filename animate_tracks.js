@@ -1,13 +1,16 @@
 // Global variables to track play/pause state and the interval ID
 let isPlaying = false;
 let playbackInterval;
+const colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta'];
 
 document.addEventListener('DOMContentLoaded', () => {
     const slider = createSlider();
     const timeLegend = createTimeLegend(slider);
+    const boatLegend = createBoatLegend();
 
     document.body.appendChild(slider);
     document.body.appendChild(timeLegend);
+    document.body.appendChild(boatLegend);
 
     // Access the Folium-initialized map using the dynamically generated map_id
     const map = window[map_id];
@@ -17,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     slider.addEventListener('input', () => {
         updateTrackMarkers(slider, trackMarkers);
         updateTimeDisplay(slider, timeLegend);
+        updateBoatLegend(slider, boatLegend);
     });
 
     // Initialize with the first timestamp
@@ -73,8 +77,12 @@ function createTimeLegend(slider) {
     return timeLegend;
 }
 
+function createBoatLegend() {
+    const legend = document.getElementById('boat-legend');
+    return legend;
+}
+
 function initializeTrackMarkers(map) {
-    const colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta'];
     return gpx_points_data.map((track, index) => {
         const color = colors[index % colors.length];
         const marker = L.circleMarker([track[0].lat, track[0].lon], {
@@ -110,6 +118,28 @@ function updateTimeDisplay(slider, timeLegend) {
     const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
     const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
     timeLegend.timeDisplay.innerHTML = `${new Date(currentTime).toUTCString()}`;
+}
+
+function updateBoatLegend(slider, legend) {
+    const timeIndex = Math.floor(slider.value / 1000 * (gpx_timestamps.length - 1));
+    const currentTime = new Date(gpx_timestamps[timeIndex]).getTime();
+    legend.querySelectorAll('.boat-entry').forEach((entry) => {
+        const idx = parseInt(entry.getAttribute('data-index'));
+        const track = gpx_points_data[idx];
+        const speeds = gpx_speeds_data[idx];
+        const dists = gpx_distances_data[idx];
+        let pointIndex = 0;
+        for (let i = 1; i < track.length; i++) {
+            const pointTime = new Date(track[i].time).getTime();
+            if (pointTime <= currentTime) {
+                pointIndex = i;
+            } else {
+                break;
+            }
+        }
+        entry.querySelector('.distance').textContent = `${dists[pointIndex].toFixed(1)} nm`;
+        entry.querySelector('.speed').textContent = `${speeds[pointIndex].toFixed(1)} kt`;
+    });
 }
 
 function updateSlider(slider) {
