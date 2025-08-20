@@ -1,8 +1,8 @@
 import argparse
 import sys
 
-from validator import validate_gpx, GPXValidationError
-from gpx_utils import remove_extensions_tags
+from gpx_player.validator import validate_gpx, GPXValidationError
+from gpx_player.gpx_utils import remove_extensions_tags
 
 
 def clean_gpx_file(gpx_file: str, overwrite: bool = False) -> tuple[str, int]:

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from clean_gpx import clean_gpx_file
-from validator import GPXValidationError
+from gpx_player.clean_gpx import clean_gpx_file
+from gpx_player.validator import GPXValidationError
 
 
 def test_clean_gpx_file(tmp_path):

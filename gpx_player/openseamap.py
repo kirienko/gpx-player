@@ -9,7 +9,7 @@ import jinja2
 import matplotlib.pyplot as plt
 from jinja2 import Environment, FileSystemLoader
 
-from utils import track_serializer
+from gpx_player.utils import track_serializer
 
 
 def parse_arguments():

@@ -2,8 +2,8 @@ import datetime as dt
 import shutil
 from pathlib import Path
 
-from utils import slug, timedelta_to_hms
-from gpx_utils import remove_extensions_tags
+from gpx_player.utils import slug, timedelta_to_hms
+from gpx_player.gpx_utils import remove_extensions_tags
 
 def test_slug():
     # Test cases for the slug function

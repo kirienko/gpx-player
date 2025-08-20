@@ -9,8 +9,7 @@ import matplotlib.pyplot as plt
 import pytz
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 
-from utils import (format_func, gen_arrow_head_marker,
-                   km_to_nm, slug, timedelta_to_hms)
+from gpx_player.utils import format_func, gen_arrow_head_marker, km_to_nm, slug, timedelta_to_hms
 
 base_path = '.'
 

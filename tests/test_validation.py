@@ -1,5 +1,5 @@
 import pytest
-from validator import validate_gpx, GPXValidationError
+from gpx_player.validator import validate_gpx, GPXValidationError
 
 def test_validate_gpx_file():
     gpx_file_path = "./example-data/osm-demo-Yury.gpx"

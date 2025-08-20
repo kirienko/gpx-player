@@ -22,9 +22,11 @@ dependencies = [
 ]
 
 [project.scripts]              # CLI entry-points after `pip install gpx-player`
-gpx-player  = "main:main"
-gpx-validate = "validator:main"
+gpx-player   = "gpx_player.main:main"
+gpx-validate = "gpx_player.validator:main"
+
+[tool.setuptools.packages]
+find = {}
 
 [tool.setuptools]
-py-modules = ["main", "openseamap", "gpx_utils", "utils", "validator"]
 include-package-data = true

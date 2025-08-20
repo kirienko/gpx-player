@@ -41,18 +41,18 @@ pip install -r requirements.txt
 ## Usage
 To run the script producing `mp4`, pass one or more GPX file paths as command-line arguments:
 ```bash
-python main.py example-data/track1.gpx example-data/track2.gpx
+gpx-player example-data/track1.gpx example-data/track2.gpx
 ```
-To get a sea map, run the `openseamap.py`:
+To get a sea map, run the module:
 ```bash
-python openseamap.py --title 'Gin Sul Regatta 2024' --names Alex Yury Richard \
+python -m gpx_player.openseamap --title 'Gin Sul Regatta 2024' --names Alex Yury Richard \
      --files example-data/osm-demo-Alex.gpx example-data/osm-demo-Richard.gpx \
              example-data/osm-demo-Yury.gpx
 ```
 
 A more sophisticated example, that produced a video above:
 ```bash
-python main.py example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
+gpx-player example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
        --start 2023-07-01T10:53:00+0000 \
        --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
        --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
@@ -99,7 +99,19 @@ supporting both strict and lenient modes.
 Errors are raised as `GPXValidationError` which can be caught in Python code. 
 To run as a CLI tool, use:
 ```bash
-python validator.py path/to/yourfile.gpx --strict
+gpx-validate path/to/yourfile.gpx --strict
+```
+
+### Use as a Python module
+
+```python
+from gpx_player.validator import validate_gpx, GPXValidationError
+
+try:
+    validate_gpx("path/to/yourfile.gpx", strict=True)
+    print("GPX file is valid")
+except GPXValidationError as e:
+    print("GPX validation failed:", e)
 ```
 
 The `--strict` parameter is optional. In most cases you do not need it, 
@@ -142,7 +154,7 @@ place.
 Run it from the command line as follows:
 
 ```bash
-python clean_gpx.py path/to/yourfile.gpx [--overwrite]
+python -m gpx_player.clean_gpx path/to/yourfile.gpx [--overwrite]
 ```
 
 If validation fails, the command exits with an error message. The output reports

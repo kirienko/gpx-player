@@ -5,7 +5,7 @@ import pytest
 
 import gpxpy.geo
 
-from openseamap import (
+from gpx_player.openseamap import (
     parse_gpx,
     speed_to_color,
     accumulate_distances,
