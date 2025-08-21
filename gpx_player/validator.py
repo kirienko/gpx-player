@@ -32,18 +32,18 @@ def parse_timestamp(timestamp_str):
 
 
 def load_schema(version):
-    xsd_filename = ""
-    if version in ("1.0", "1.1"):
-        xsd_filename = f"schema/gpx_{version}.xsd"
-    else:
+    from pathlib import Path
+    if version not in ("1.0", "1.1"):
         raise GPXValidationError(f"Unsupported GPX version: {version}")
+    schema_dir = Path(__file__).parent.parent / "schema"
+    xsd_path = schema_dir / f"gpx_{version}.xsd"
 
     try:
-        with open(xsd_filename, 'rb') as f:
+        with xsd_path.open('rb') as f:
             schema_doc = etree.parse(f)
             schema = etree.XMLSchema(schema_doc)
     except Exception as e:
-        raise GPXValidationError(f"Error loading schema file '{xsd_filename}': {e}")
+        raise GPXValidationError(f"Error loading schema file '{xsd_path}': {e}")
     return schema
 
 
