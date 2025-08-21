@@ -20,3 +20,6 @@ All notable changes to **gpx-player** will be documented in this file.
 * Switch CLI entry points to package modules and enable package discovery: `gpx-player` and `gpx-validate`.
 * Update README examples to use the new CLI and `python -m gpx_player.*`.
 * **Potentially breaking:** update imports (`from validator` → `from gpx_player.validator`) and prefer installed CLIs over top-level scripts.
+
+## 0.2.1 — 2025-08-21
+* Fix schemas for GPX validator.
