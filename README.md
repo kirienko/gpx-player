@@ -1,4 +1,10 @@
 # gpx-player
+[![CI](https://github.com/kirienko/gpx-player/actions/workflows/codecov.yml/badge.svg)](https://github.com/kirienko/gpx-player/actions/workflows/codecov.yml)
+[![codecov](https://codecov.io/gh/kirienko/gpx-player/branch/main/graph/badge.svg)](https://codecov.io/gh/kirienko/gpx-player)
+[![PyPI version](https://img.shields.io/pypi/v/gpx-player)](https://pypi.org/project/gpx-player/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/gpx-player)](https://pypi.org/project/gpx-player/)
+[![License](https://img.shields.io/github/license/kirienko/gpx-player)](LICENSE)
+
 ## GPX Race Visualizer
 
 GPX Race Visualizer is a Python script to visualize the progression of multiple GPS tracks (e.g., from a race) on a 2D map. 
