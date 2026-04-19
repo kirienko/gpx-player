@@ -11,6 +11,7 @@ from gpx_player.openseamap import (
     accumulate_distances,
     calculate_average_speeds,
     create_map,
+    _parse_iso_datetime,
 )
 
 
@@ -170,6 +171,18 @@ def test_create_map_keeps_fallback_max_speed_when_no_positive_speed():
         [path], names=None, max_speed=0.1,
     )
     assert max_speed == 0.1
+
+
+def test_parse_iso_datetime_variants():
+    cases = [
+        "2026-04-12T17:01:00+0200",
+        "2026-04-12T17:01:00+02:00",
+        "2026-04-12T17:01:00.500+02:00",
+        "2026-04-12T15:01:00Z",
+    ]
+    for s in cases:
+        parsed = _parse_iso_datetime(s)
+        assert parsed.tzinfo is not None, f"lost tz for {s!r}"
 
 
 def test_create_map_rejects_inverted_window():

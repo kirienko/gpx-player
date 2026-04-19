@@ -14,6 +14,12 @@ from gpx_player.gpx_utils import trim_track
 from gpx_player.utils import track_serializer
 
 
+def _parse_iso_datetime(s: str) -> dt.datetime:
+    # fromisoformat accepts fractional seconds and common ISO variants;
+    # normalise a trailing 'Z' to '+00:00' for Python < 3.11 compatibility.
+    return dt.datetime.fromisoformat(s.replace('Z', '+00:00'))
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Animate GPX tracks on an OpenSeaMap.")
     parser.add_argument('--files', nargs='+', required=True, help='GPX files to process')
@@ -21,10 +27,10 @@ def parse_arguments():
     parser.add_argument('--max-speed', '-ms', type=float, default=12, help='Maximum speed in knots (default: 12)')
     parser.add_argument('--title', '-t', help='The title of the page')
     parser.add_argument('--start', '-s',
-                        type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'),
+                        type=_parse_iso_datetime,
                         help='Start time (ISO 8601 with timezone, e.g. 2026-04-12T17:01:00+0200)')
     parser.add_argument('--end', '-e',
-                        type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'),
+                        type=_parse_iso_datetime,
                         help='End time (ISO 8601 with timezone, e.g. 2026-04-12T17:33:00+0200)')
     return parser.parse_args()
 
