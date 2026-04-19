@@ -161,6 +161,17 @@ def test_create_map_with_time_window():
     assert len(all_tracks[0]['point_speeds']) == 4
 
 
+def test_create_map_keeps_fallback_max_speed_when_no_positive_speed():
+    # Every segment exceeds this tiny max_speed and gets clamped to 0 by
+    # calculate_speeds. The recompute must keep the caller-supplied fallback
+    # instead of collapsing to 0 (which would make speed_to_color divide by zero).
+    path, _t0 = _write_sample_gpx(n_points=4, step_seconds=60)
+    _map, _all_tracks, max_speed, _map_id = create_map(
+        [path], names=None, max_speed=0.1,
+    )
+    assert max_speed == 0.1
+
+
 def test_create_map_rejects_inverted_window():
     path, t0 = _write_sample_gpx(n_points=4)
     start = t0 + dt.timedelta(minutes=10)

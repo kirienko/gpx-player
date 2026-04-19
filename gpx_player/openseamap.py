@@ -165,8 +165,9 @@ def create_map(
             })
             original_names.append(track['name'])
 
-    seg_speed_values = [s for track in all_tracks for s in track['seg_speeds']]
-    max_speed = max(seg_speed_values) if seg_speed_values else max_speed
+    positive_speeds = [s for track in all_tracks for s in track['seg_speeds'] if s > 0]
+    if positive_speeds:
+        max_speed = max(positive_speeds)
 
     # Calculate map bounds
     latitudes = [p['lat'] for track in all_tracks for p in track['points']]
