@@ -121,6 +121,11 @@ def create_map(
     ``[start_time, end_time]`` are rendered. Points outside the window are
     excluded from the map, speed calculations, and distance totals.
     """
+    if start_time is not None and end_time is not None and start_time > end_time:
+        raise ValueError(
+            f"start_time ({start_time}) must be <= end_time ({end_time})"
+        )
+
     folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False, tiles=None)
     map_id = folium_map.get_name()
 

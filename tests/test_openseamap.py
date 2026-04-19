@@ -161,6 +161,14 @@ def test_create_map_with_time_window():
     assert len(all_tracks[0]['point_speeds']) == 4
 
 
+def test_create_map_rejects_inverted_window():
+    path, t0 = _write_sample_gpx(n_points=4)
+    start = t0 + dt.timedelta(minutes=10)
+    end = t0 + dt.timedelta(minutes=1)
+    with pytest.raises(ValueError):
+        create_map([path], names=None, max_speed=12.0, start_time=start, end_time=end)
+
+
 def test_create_map_skips_empty_track(capsys):
     path, t0 = _write_sample_gpx(n_points=4)
     # Window entirely before the track's time range.
