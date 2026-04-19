@@ -1,6 +1,7 @@
 import argparse
+import datetime as dt
 import json
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import folium
 import gpxpy
@@ -9,6 +10,7 @@ import jinja2
 import matplotlib.pyplot as plt
 from jinja2 import Environment, FileSystemLoader
 
+from gpx_player.gpx_utils import trim_track
 from gpx_player.utils import track_serializer
 
 
@@ -18,6 +20,12 @@ def parse_arguments():
     parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
     parser.add_argument('--max-speed', '-ms', type=float, default=12, help='Maximum speed in knots (default: 12)')
     parser.add_argument('--title', '-t', help='The title of the page')
+    parser.add_argument('--start', '-s',
+                        type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'),
+                        help='Start time (ISO 8601 with timezone, e.g. 2026-04-12T17:01:00+0200)')
+    parser.add_argument('--end', '-e',
+                        type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'),
+                        help='End time (ISO 8601 with timezone, e.g. 2026-04-12T17:33:00+0200)')
     return parser.parse_args()
 
 
@@ -100,7 +108,19 @@ def speed_to_color(speed: float, max_speed: float) -> str:
     )
 
 
-def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tuple[folium.Map, List[List], float, str]:
+def create_map(
+    gpx_files: List[str],
+    names: List[str],
+    max_speed: float,
+    start_time: Optional[dt.datetime] = None,
+    end_time: Optional[dt.datetime] = None,
+) -> Tuple[folium.Map, List[List], float, str]:
+    """Create an interactive map from GPX files.
+
+    When ``start_time`` and/or ``end_time`` are provided, only points within
+    ``[start_time, end_time]`` are rendered. Points outside the window are
+    excluded from the map, speed calculations, and distance totals.
+    """
     folium_map = folium.Map(location=[0, 0], zoom_start=12, control_scale=True, attributionControl=False, tiles=None)
     map_id = folium_map.get_name()
 
@@ -117,7 +137,15 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
     original_names = []
     for gpx_file in gpx_files:
         for track in parse_gpx(gpx_file):
+            if start_time is not None or end_time is not None:
+                lo = start_time if start_time is not None else dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+                hi = end_time if end_time is not None else dt.datetime.max.replace(tzinfo=dt.timezone.utc)
+                track = trim_track(track, lo, hi)
             points = track['points']
+            if not points:
+                print(f"Warning: track '{track.get('name')}' has no points in "
+                      f"[{start_time}, {end_time}]; skipping.")
+                continue
             seg_speeds = calculate_speeds(points, max_speed)
             distances = accumulate_distances(points)
             avg_speeds = calculate_average_speeds(points, distances)
@@ -132,12 +160,14 @@ def create_map(gpx_files: List[str], names: List[str], max_speed: float) -> Tupl
             })
             original_names.append(track['name'])
 
-    max_speed = max(s for track in all_tracks for s in track['seg_speeds'])
+    seg_speed_values = [s for track in all_tracks for s in track['seg_speeds']]
+    max_speed = max(seg_speed_values) if seg_speed_values else max_speed
 
     # Calculate map bounds
     latitudes = [p['lat'] for track in all_tracks for p in track['points']]
     longitudes = [p['lon'] for track in all_tracks for p in track['points']]
-    folium_map.fit_bounds([[min(latitudes), min(longitudes)], [max(latitudes), max(longitudes)]])
+    if latitudes and longitudes:
+        folium_map.fit_bounds([[min(latitudes), min(longitudes)], [max(latitudes), max(longitudes)]])
 
     track_layers = []
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
@@ -227,7 +257,10 @@ def main():
 
     env = Environment(loader=FileSystemLoader('.'))
 
-    folium_map, all_tracks, max_speed, map_id = create_map(gpx_files, names, args.max_speed)
+    folium_map, all_tracks, max_speed, map_id = create_map(
+        gpx_files, names, args.max_speed,
+        start_time=args.start, end_time=args.end,
+    )
     add_animation(folium_map, all_tracks, env, args.title, map_id)
 
     add_legend(folium_map, max_speed, env)
