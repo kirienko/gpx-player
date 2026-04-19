@@ -180,6 +180,26 @@ def test_create_map_rejects_inverted_window():
         create_map([path], names=None, max_speed=12.0, start_time=start, end_time=end)
 
 
+def test_create_map_names_stay_aligned_when_track_skipped():
+    # file0 survives; file1's only track is fully outside the window and gets
+    # skipped; file2 survives. The remaining tracks must keep their original
+    # names positionally — not shift onto names[1].
+    t_base = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    p0, _ = _write_sample_gpx(n_points=3, start=t_base.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    p1, _ = _write_sample_gpx(n_points=3, start=(t_base - dt.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    p2, _ = _write_sample_gpx(n_points=3, start=t_base.strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+    start = t_base - dt.timedelta(minutes=1)
+    end = t_base + dt.timedelta(hours=1)
+
+    _map, all_tracks, _max_speed, _map_id = create_map(
+        [p0, p1, p2], names=["Alex", "Ben", "Cara"], max_speed=12.0,
+        start_time=start, end_time=end,
+    )
+
+    assert [t['display_name'] for t in all_tracks] == ["Alex", "Cara"]
+
+
 def test_create_map_skips_empty_track(capsys):
     path, t0 = _write_sample_gpx(n_points=4)
     # Window entirely before the track's time range.
