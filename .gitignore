@@ -2,3 +2,6 @@ data/
 run.json
 .aider*
 .env
+__pycache__/
+*.py[cod]
+.pytest_cache/
