@@ -266,6 +266,9 @@ def main():
         gpx_files, names, args.max_speed,
         start_time=args.start, end_time=args.end,
     )
+    if not all_tracks:
+        print("No GPX points found in the selected time window; nothing to render.")
+        return
     add_animation(folium_map, all_tracks, env, args.title, map_id)
 
     add_legend(folium_map, max_speed, env)
