@@ -56,6 +56,14 @@ python -m gpx_player.openseamap --title 'Gin Sul Regatta 2024' --names Alex Yury
              example-data/osm-demo-Yury.gpx
 ```
 
+Restrict the map to a specific time window with `--start` / `--end` (same
+format as in video mode). Speed, distance, map bounds and the animation
+slider all reflect only the filtered segment:
+```bash
+python -m gpx_player.openseamap --files example-data/osm-demo-Alex.gpx \
+     --start 2024-07-24T18:10:00+0200 --end 2024-07-24T18:30:00+0200
+```
+
 A more sophisticated example, that produced a video above:
 ```bash
 gpx-player example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
