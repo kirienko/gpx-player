@@ -23,3 +23,17 @@ All notable changes to **gpx-player** will be documented in this file.
 
 ## 0.2.1 — 2025-08-21
 * Fix schemas for GPX validator.
+
+## 0.3.0 — 2026-04-19
+* **Map mode**: add `--start` / `--end` flags to `gpx_player.openseamap` for
+  rendering only a time window of a GPX track. Points outside the window are
+  excluded from the map, speed calculations, distance totals, map bounds and
+  the animation slider (#15).
+* `create_map()` gains optional `start_time` / `end_time` keyword arguments;
+  default behaviour is unchanged when they are omitted.
+* Tracks whose filtered window contains no points are skipped with a warning
+  instead of crashing; the all-empty case is guarded so `max_speed` and
+  `fit_bounds` do not fail on empty inputs.
+* New utility `gpx_player.gpx_utils.trim_track()` (and `trim_tracks()` wrapper)
+  for in-memory time-window trimming of already-parsed tracks, preserving
+  track metadata and point extension fields without mutating the input (#14).

@@ -40,6 +40,45 @@ def cut_gpx_file(file_path, timestamp, cut_type):
     return new_file_path
 
 
+def _ensure_aware(ts: datetime, name: str) -> None:
+    if ts.tzinfo is None:
+        raise ValueError(f"trim_track: {name} must be timezone-aware")
+
+
+def trim_track(track: dict, start_time: datetime, end_time: datetime) -> dict:
+    """Return a new track with only points in ``[start_time, end_time]``.
+
+    The input ``track`` is not mutated. All point fields (including any
+    extension keys) and track metadata (``name``, ``description``, ...) are
+    preserved. A ``ValueError`` is raised if the bounds are naive or if point
+    timestamps and bounds disagree on timezone awareness.
+    """
+    _ensure_aware(start_time, "start_time")
+    _ensure_aware(end_time, "end_time")
+
+    filtered = []
+    for p in track.get('points', []):
+        t = p.get('time')
+        if t is None:
+            continue
+        if (t.tzinfo is None) != (start_time.tzinfo is None):
+            raise ValueError(
+                "trim_track: point timestamps and start/end_time must both be "
+                "timezone-aware or both be naive"
+            )
+        if start_time <= t <= end_time:
+            filtered.append(dict(p))
+
+    new_track = {k: v for k, v in track.items() if k != 'points'}
+    new_track['points'] = filtered
+    return new_track
+
+
+def trim_tracks(tracks, start_time: datetime, end_time: datetime):
+    """Apply :func:`trim_track` to each track and return a new list."""
+    return [trim_track(t, start_time, end_time) for t in tracks]
+
+
 def remove_extensions_tags(file_path: str, overwrite: bool = False) -> tuple[str, int]:
     """Remove all ``<extensions>...</extensions>`` blocks from a GPX file.
 

@@ -2,8 +2,20 @@ import datetime as dt
 import shutil
 from pathlib import Path
 
+import pytest
+
 from gpx_player.utils import slug, timedelta_to_hms
-from gpx_player.gpx_utils import remove_extensions_tags
+from gpx_player.gpx_utils import remove_extensions_tags, trim_track, trim_tracks
+
+
+def _make_track(n, start, step=dt.timedelta(minutes=1), extras=None):
+    points = []
+    for i in range(n):
+        p = {'lat': float(i), 'lon': -float(i), 'time': start + i * step}
+        if extras:
+            p.update(extras)
+        points.append(p)
+    return {'name': 'T', 'description': 'd', 'points': points}
 
 def test_slug():
     # Test cases for the slug function
@@ -83,3 +95,67 @@ def test_remove_extensions_tags_overwrite(tmp_path):
     assert cleaned == str(dst)
     with open(dst) as f:
         assert "<extensions>" not in f.read()
+
+
+def test_trim_track_basic_window():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    track = _make_track(5, t0)
+    trimmed = trim_track(track, t0 + dt.timedelta(minutes=1), t0 + dt.timedelta(minutes=3))
+    assert len(trimmed['points']) == 3
+    assert trimmed['points'][0]['time'] == t0 + dt.timedelta(minutes=1)
+    assert trimmed['points'][-1]['time'] == t0 + dt.timedelta(minutes=3)
+    assert trimmed['name'] == 'T'
+    assert trimmed['description'] == 'd'
+
+
+def test_trim_track_does_not_mutate_input():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    track = _make_track(4, t0)
+    original_points_id = id(track['points'])
+    original_first = track['points'][0]
+    original_first_id = id(original_first)
+    original_snapshot = dict(original_first)
+
+    trim_track(track, t0, t0 + dt.timedelta(minutes=1))
+
+    assert id(track['points']) == original_points_id
+    assert len(track['points']) == 4
+    assert id(track['points'][0]) == original_first_id
+    assert track['points'][0] == original_snapshot
+
+
+def test_trim_track_empty_result():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    track = _make_track(3, t0)
+    trimmed = trim_track(track, t0 - dt.timedelta(hours=2), t0 - dt.timedelta(hours=1))
+    assert trimmed['points'] == []
+    assert trimmed['name'] == 'T'
+    assert trimmed['description'] == 'd'
+
+
+def test_trim_track_preserves_point_extensions():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    track = _make_track(3, t0, extras={'course': 42.0, 'hr': 120})
+    trimmed = trim_track(track, t0, t0 + dt.timedelta(minutes=1))
+    assert len(trimmed['points']) == 2
+    for p in trimmed['points']:
+        assert p['course'] == 42.0
+        assert p['hr'] == 120
+
+
+def test_trim_track_naive_vs_aware_raises():
+    t0_naive = dt.datetime(2024, 6, 15, 12, 0)
+    track = {'name': 'n', 'points': [{'lat': 0.0, 'lon': 0.0, 'time': t0_naive}]}
+    aware_start = dt.datetime(2024, 6, 15, 11, 0, tzinfo=dt.timezone.utc)
+    aware_end = dt.datetime(2024, 6, 15, 13, 0, tzinfo=dt.timezone.utc)
+    with pytest.raises(ValueError):
+        trim_track(track, aware_start, aware_end)
+
+
+def test_trim_tracks_wrapper():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    tracks = [_make_track(5, t0), _make_track(5, t0 + dt.timedelta(hours=1))]
+    trimmed = trim_tracks(tracks, t0, t0 + dt.timedelta(minutes=2))
+    assert len(trimmed) == 2
+    assert len(trimmed[0]['points']) == 3
+    assert trimmed[1]['points'] == []
