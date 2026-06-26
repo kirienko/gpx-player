@@ -55,6 +55,30 @@ python -m gpx_player.openseamap --title 'Gin Sul Regatta 2024' --names Alex Yury
      --files example-data/osm-demo-Alex.gpx example-data/osm-demo-Richard.gpx \
              example-data/osm-demo-Yury.gpx
 ```
+This writes a static playable HTML map to `boat_tracks.html` with the title,
+speed legend, boat stats legend, play/pause button, moving markers, and time
+slider.
+
+The same playable OpenSeaMap can be created from Python code:
+```python
+from gpx_player.openseamap import create_playback_map
+
+folium_map = create_playback_map(
+    [
+        "example-data/osm-demo-Alex.gpx",
+        "example-data/osm-demo-Richard.gpx",
+        "example-data/osm-demo-Yury.gpx",
+    ],
+    names=["Alex", "Richard", "Yury"],
+    max_speed=12,
+    title="Gin Sul Regatta 2024",
+)
+folium_map.save("boat_tracks.html")
+```
+
+Playback templates and JavaScript are bundled as package assets, so downstream
+applications can call this API from any current working directory after
+`pip install gpx-player`; no source checkout or local asset copies are needed.
 
 Restrict the map to a specific time window with `--start` / `--end` (same
 format as in video mode). Speed, distance, map bounds and the animation

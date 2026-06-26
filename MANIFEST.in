@@ -1,2 +1,2 @@
 recursive-include schema *.xsd
-include *.html *.js
+recursive-include gpx_player/assets *.html *.js *.css

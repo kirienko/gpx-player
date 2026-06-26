@@ -1,21 +1,27 @@
-import tempfile
 import datetime as dt
+import importlib
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
 
 import pytest
 
 import gpxpy.geo
 
 from gpx_player.openseamap import (
-    parse_gpx,
-    speed_to_color,
     accumulate_distances,
     calculate_average_speeds,
     create_map,
+    create_playback_map,
+    parse_gpx,
+    speed_to_color,
     _parse_iso_datetime,
 )
 
 
-def _write_sample_gpx(n_points=6, step_seconds=60, start="2024-06-15T12:00:00Z"):
+def _write_sample_gpx(n_points=6, step_seconds=60, start="2024-06-15T12:00:00Z", track_name="Test Track"):
     """Write a GPX file with ``n_points`` evenly spaced points; return its path."""
     t0 = dt.datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
     pts_xml = []
@@ -30,7 +36,7 @@ def _write_sample_gpx(n_points=6, step_seconds=60, start="2024-06-15T12:00:00Z")
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<gpx version="1.1" creator="pytest">\n'
         '    <trk>\n'
-        '        <name>Test Track</name>\n'
+        f'        <name>{track_name}</name>\n'
         '        <trkseg>\n'
         + "\n".join(pts_xml) + "\n"
         '        </trkseg>\n'
@@ -138,6 +144,93 @@ def test_create_map_default_unchanged():
 
     assert len(all_tracks) == 1
     assert len(all_tracks[0]['points']) == 6
+
+
+def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
+    path, _t0 = _write_sample_gpx(n_points=4)
+    malicious_title = 'Race "</script><script>alert(1)</script>'
+    malicious_name = 'Boat "</script><script>alert(2)</script>'
+
+    monkeypatch.chdir(tmp_path)
+    openseamap = importlib.import_module("gpx_player.openseamap")
+    folium_map = openseamap.create_playback_map(
+        [path],
+        names=[malicious_name],
+        max_speed=12.0,
+        title=malicious_title,
+    )
+
+    rendered = folium_map.get_root().render()
+
+    assert "window.gpxPlayerPlayback" in rendered
+    assert "gpx-player-time-slider" in rendered
+    assert "gpx-player-play-pause" in rendered
+    assert "Speed (knots)" in rendered
+    assert "Distance / Speed / Avg" in rendered
+    assert "Race" in rendered
+    assert "Boat" in rendered
+    assert '</script><script>alert(1)</script>' not in rendered
+    assert '</script><script>alert(2)</script>' not in rendered
+    assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in rendered
+    assert "&lt;/script&gt;&lt;script&gt;alert(2)&lt;/script&gt;" in rendered
+    assert 'document.querySelector("button")' not in rendered
+
+
+def test_create_playback_map_renders_multi_track_boat_legend():
+    path1, _ = _write_sample_gpx(n_points=4, track_name="Track One")
+    path2, _ = _write_sample_gpx(n_points=4, track_name="Track Two")
+
+    folium_map = create_playback_map(
+        [path1, path2],
+        names=["Alpha", "Beta"],
+        max_speed=12.0,
+        title="Fleet",
+    )
+
+    rendered = folium_map.get_root().render()
+
+    assert "Alpha" in rendered
+    assert "Beta" in rendered
+    assert 'class="boat-entry"' in rendered
+    assert 'data-index="0"' in rendered
+    assert 'data-index="1"' in rendered
+    assert rendered.count('class="boat-entry"') == 2
+
+
+def test_wheel_includes_playback_assets(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    dist_dir = tmp_path / "dist"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            str(project_root),
+            "--no-deps",
+            "--no-build-isolation",
+            "-w",
+            str(dist_dir),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    wheel = next(dist_dir.glob("gpx_player-*.whl"))
+    with zipfile.ZipFile(wheel) as zf:
+        wheel_files = set(zf.namelist())
+
+    expected_assets = {
+        "gpx_player/assets/animate_tracks.js",
+        "gpx_player/assets/speed_legend_template.html",
+        "gpx_player/assets/boat_legend_template.html",
+        "gpx_player/assets/header_template.html",
+    }
+    assert expected_assets <= wheel_files
 
 
 def test_create_map_with_time_window():
