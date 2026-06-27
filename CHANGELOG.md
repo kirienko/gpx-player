@@ -37,3 +37,19 @@ All notable changes to **gpx-player** will be documented in this file.
 * New utility `gpx_player.gpx_utils.trim_track()` (and `trim_tracks()` wrapper)
   for in-memory time-window trimming of already-parsed tracks, preserving
   track metadata and point extension fields without mutating the input (#14).
+
+## 0.4.0 — 2026-06-26
+* **Map mode**: bundle playback JavaScript and HTML templates as package
+  assets, so installed wheels can generate playable OpenSeaMap HTML from any
+  current working directory.
+* Add public `add_playback_controls()` and `create_playback_map()` helpers for
+  downstream Python applications that want static playable maps without
+  vendoring assets.
+* Escape title/name output and serialize playback data safely for inline
+  scripts, preventing user-provided strings from breaking out of generated
+  HTML/JavaScript.
+* Scope playback UI state by Folium map id under `window.gpxPlayerPlayback`,
+  avoid generic button selectors, and add accessible labels for the play/pause
+  button and time slider.
+* Keep `create_map()` and existing map CLI behavior working while routing the
+  CLI through the packaged playback helper.

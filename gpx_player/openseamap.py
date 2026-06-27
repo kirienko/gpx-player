@@ -1,6 +1,9 @@
 import argparse
 import datetime as dt
 import json
+import re
+from html import escape as html_escape
+from importlib import resources
 from typing import List, Optional, Tuple
 
 import folium
@@ -8,16 +11,57 @@ import gpxpy
 import gpxpy.gpx
 import jinja2
 import matplotlib.pyplot as plt
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 from gpx_player.gpx_utils import trim_track
 from gpx_player.utils import track_serializer
+
+_ASSET_PACKAGE = "gpx_player.assets"
+_TRACK_COLORS = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
+_COMPACT_TZ_RE = re.compile(r"([+-]\d{2})(\d{2})$")
+
+
+def _read_asset_text(filename: str) -> str:
+    """Read a bundled static asset from the installed package."""
+    try:
+        return resources.files(_ASSET_PACKAGE).joinpath(filename).read_text(encoding="utf-8")
+    except AttributeError:  # pragma: no cover - Python 3.8 compatibility
+        return resources.read_text(_ASSET_PACKAGE, filename, encoding="utf-8")
+
+
+def _template_env() -> Environment:
+    return Environment(
+        loader=PackageLoader("gpx_player", "assets"),
+        autoescape=select_autoescape(("html", "xml")),
+    )
+
+
+def _json_for_inline_script(data) -> str:
+    """Serialize JSON so it cannot terminate an inline script block."""
+    return (
+        json.dumps(data, default=track_serializer)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
+def _display_name(track: dict) -> str:
+    return str(track.get('display_name') or track.get('name') or 'Track')
+
+
+def _boat_legend_id(map_id: Optional[str]) -> str:
+    return f"gpx-player-boat-legend-{map_id}" if map_id else "boat-legend"
 
 
 def _parse_iso_datetime(s: str) -> dt.datetime:
     # fromisoformat accepts fractional seconds and common ISO variants;
     # normalise a trailing 'Z' to '+00:00' for Python < 3.11 compatibility.
-    return dt.datetime.fromisoformat(s.replace('Z', '+00:00'))
+    normalized = s.replace('Z', '+00:00')
+    normalized = _COMPACT_TZ_RE.sub(r"\1:\2", normalized)
+    return dt.datetime.fromisoformat(normalized)
 
 
 def parse_arguments():
@@ -116,11 +160,11 @@ def speed_to_color(speed: float, max_speed: float) -> str:
 
 def create_map(
     gpx_files: List[str],
-    names: List[str],
+    names: Optional[List[str]],
     max_speed: float,
     start_time: Optional[dt.datetime] = None,
     end_time: Optional[dt.datetime] = None,
-) -> Tuple[folium.Map, List[List], float, str]:
+) -> Tuple[folium.Map, List[dict], float, str]:
     """Create an interactive map from GPX files.
 
     When ``start_time`` and/or ``end_time`` are provided, only points within
@@ -154,8 +198,10 @@ def create_map(
             display_name = (
                 names[source_index]
                 if names and source_index < len(names)
-                else track['name']
+                else track.get('name')
             )
+            if display_name is None:
+                display_name = f"Track {source_index + 1}"
             if start_time is not None or end_time is not None:
                 lo = start_time if start_time is not None else dt.datetime.min.replace(tzinfo=dt.timezone.utc)
                 hi = end_time if end_time is not None else dt.datetime.max.replace(tzinfo=dt.timezone.utc)
@@ -190,19 +236,19 @@ def create_map(
         folium_map.fit_bounds([[min(latitudes), min(longitudes)], [max(latitudes), max(longitudes)]])
 
     track_layers = []
-    colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
     
     for i, track in enumerate(all_tracks):
-        color = colors[i % len(colors)]
+        color = _TRACK_COLORS[i % len(_TRACK_COLORS)]
         lat_lon = [(p['lat'], p['lon']) for p in track['points']]
         speeds = track['seg_speeds']
         times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p in track['points']]
-        name = track['display_name']
+        name = _display_name(track)
+        escaped_name = html_escape(name, quote=True)
 
-        track_layer = folium.FeatureGroup(name=f"<span style='color:{color};'>&#9679;</span> {name}", show=True)
+        track_layer = folium.FeatureGroup(name=f"<span style='color:{color};'>&#9679;</span> {escaped_name}", show=True)
         for j in range(len(lat_lon) - 1):
             color = speed_to_color(speeds[j], max_speed)
-            tooltip_content = f"Name: {name}<br>Time: {times[j]} UTC<br>Speed: {speeds[j]:.2f} knots"
+            tooltip_content = f"Name: {escaped_name}<br>Time: {times[j]} UTC<br>Speed: {speeds[j]:.2f} knots"
             folium.PolyLine(
                 lat_lon[j:j + 2],
                 color=color,
@@ -218,55 +264,174 @@ def create_map(
     return folium_map, all_tracks, max_speed, map_id
 
 
-def add_animation(folium_map: folium.Map,
-                  all_tracks: List[dict],
-                  jinja_env: jinja2.Environment,
-                  title: str, map_id: str) -> None:
+def _add_animation_script(
+    folium_map: folium.Map,
+    all_tracks: List[dict],
+    *,
+    title: Optional[str],
+    map_id: str,
+    boat_legend_id: str,
+) -> None:
     gpx_points_data = [track['points'] for track in all_tracks]
     gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
     gpx_distances_data = [track['distances'] for track in all_tracks]
     gpx_avg_speeds_data = [track['avg_speeds'] for track in all_tracks]
-    track_names = [track['name'] for track in all_tracks]
+    track_names = [_display_name(track) for track in all_tracks]
     gpx_timestamps = sorted({p['time'] for track in all_tracks for p in track['points']})
     min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
     time_range = (max_time - min_time).total_seconds()
-
+    payload = {
+        "mapId": map_id,
+        "colors": _TRACK_COLORS,
+        "points": gpx_points_data,
+        "speeds": gpx_speeds_data,
+        "distances": gpx_distances_data,
+        "avgSpeeds": gpx_avg_speeds_data,
+        "trackNames": track_names,
+        "timestamps": gpx_timestamps,
+        "minTime": min_time,
+        "maxTime": max_time,
+        "timeRange": time_range,
+        "title": title or "GPX Player",
+        "sliderId": f"gpx-player-slider-{map_id}",
+        "timeLegendId": f"gpx-player-time-legend-{map_id}",
+        "playPauseButtonId": f"gpx-player-play-pause-{map_id}",
+        "boatLegendId": boat_legend_id,
+    }
+    map_id_json = _json_for_inline_script(map_id)
+    payload_json = _json_for_inline_script(payload)
     animation_script = f"""
     <script>
-    var gpx_points_data = {json.dumps(gpx_points_data, default=track_serializer)};
-    var gpx_speeds_data = {json.dumps(gpx_speeds_data)};
-    var gpx_distances_data = {json.dumps(gpx_distances_data)};
-    var gpx_avg_speeds_data = {json.dumps(gpx_avg_speeds_data)};
-    var track_names = {json.dumps(track_names)};
-    var gpx_timestamps = {json.dumps([t for t in gpx_timestamps], default=track_serializer)};
-    var min_time = new Date('{min_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();
-    var max_time = new Date('{max_time.strftime('%Y-%m-%dT%H:%M:%S%z')}').getTime();
-    var time_range = {time_range};
-    var map_id = "{map_id}";
-    document.title = "{title if title else 'GPX Player'}";
+    window.gpxPlayerPlayback = window.gpxPlayerPlayback || {{}};
+    window.gpxPlayerPlayback[{map_id_json}] = {payload_json};
+    document.title = window.gpxPlayerPlayback[{map_id_json}].title;
     </script>
-    <script>                                                                                                                                                                                                                       
-    {open('animate_tracks.js', encoding='UTF-8').read()}                                                                                                                                                                                             
+    <script>
+    {_read_asset_text('animate_tracks.js')}
     </script>
     """
     folium_map.get_root().html.add_child(folium.Element(animation_script))
 
+
+def _add_header(
+    folium_map: folium.Map,
+    title: str,
+    map_id: str,
+    jinja_env: Optional[jinja2.Environment] = None,
+) -> None:
+    template = (jinja_env or _template_env()).get_template('header_template.html')
+    header_html = template.render(title=title, map_id=map_id)
+    folium_map.get_root().html.add_child(folium.Element(header_html))
+
+
+def add_playback_controls(
+    folium_map: folium.Map,
+    all_tracks: List[dict],
+    *,
+    max_speed: float,
+    map_id: str,
+    title: Optional[str] = None,
+) -> None:
+    """Add playback UI, legends, markers, and data to a Folium map.
+
+    The templates and JavaScript are loaded from package resources, so this
+    works from an installed wheel regardless of the current working directory.
+    """
+    if not all_tracks:
+        return
+
+    env = _template_env()
+    boat_legend_id = _boat_legend_id(map_id)
+    _add_animation_script(
+        folium_map,
+        all_tracks,
+        title=title,
+        map_id=map_id,
+        boat_legend_id=boat_legend_id,
+    )
     if title:
-        template = jinja_env.get_template('header_template.html')
-        header_html = template.render(title=title)
-        folium_map.get_root().html.add_child(folium.Element(header_html))
+        _add_header(folium_map, title, map_id, env)
+    add_legend(folium_map, max_speed, env, map_id=map_id)
+    add_boat_legend(
+        folium_map,
+        [_display_name(track) for track in all_tracks],
+        env,
+        map_id=map_id,
+    )
 
 
-def add_legend(folium_map: folium.Map, max_speed: float, jinja_env: jinja2.Environment) -> None:
-    template = jinja_env.get_template('speed_legend_template.html')
-    legend_html = template.render(max_speed=max_speed)
+def create_playback_map(
+    gpx_files: List[str],
+    names: Optional[List[str]] = None,
+    *,
+    max_speed: float = 12,
+    title: Optional[str] = None,
+    start_time: Optional[dt.datetime] = None,
+    end_time: Optional[dt.datetime] = None,
+) -> folium.Map:
+    """Create a static OpenSeaMap with GPX playback controls."""
+    folium_map, all_tracks, actual_max_speed, map_id = create_map(
+        gpx_files,
+        names,
+        max_speed,
+        start_time=start_time,
+        end_time=end_time,
+    )
+    add_playback_controls(
+        folium_map,
+        all_tracks,
+        max_speed=actual_max_speed,
+        map_id=map_id,
+        title=title,
+    )
+    return folium_map
+
+
+def add_animation(folium_map: folium.Map,
+                  all_tracks: List[dict],
+                  jinja_env: Optional[jinja2.Environment] = None,
+                  title: Optional[str] = None, map_id: Optional[str] = None) -> None:
+    """Backward-compatible wrapper for adding playback animation assets."""
+    if not all_tracks:
+        return
+    map_id = map_id or folium_map.get_name()
+    _add_animation_script(
+        folium_map,
+        all_tracks,
+        title=title,
+        map_id=map_id,
+        boat_legend_id="boat-legend",
+    )
+    if title:
+        _add_header(folium_map, title, map_id, jinja_env)
+
+
+def add_legend(
+    folium_map: folium.Map,
+    max_speed: float,
+    jinja_env: Optional[jinja2.Environment] = None,
+    *,
+    map_id: Optional[str] = None,
+) -> None:
+    template = (jinja_env or _template_env()).get_template('speed_legend_template.html')
+    legend_html = template.render(max_speed=max_speed, map_id=map_id)
     folium_map.get_root().html.add_child(folium.Element(legend_html))
 
 
-def add_boat_legend(folium_map: folium.Map, names: List[str], jinja_env: jinja2.Environment) -> None:
-    colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
-    template = jinja_env.get_template('boat_legend_template.html')
-    legend_html = template.render(names=names, colors=colors)
+def add_boat_legend(
+    folium_map: folium.Map,
+    names: List[str],
+    jinja_env: Optional[jinja2.Environment] = None,
+    *,
+    map_id: Optional[str] = None,
+) -> None:
+    template = (jinja_env or _template_env()).get_template('boat_legend_template.html')
+    legend_html = template.render(
+        names=[str(name) for name in names],
+        colors=_TRACK_COLORS,
+        map_id=map_id,
+        boat_legend_id=_boat_legend_id(map_id),
+    )
     folium_map.get_root().html.add_child(folium.Element(legend_html))
 
 
@@ -275,8 +440,6 @@ def main():
     gpx_files = args.files
     names = args.names
 
-    env = Environment(loader=FileSystemLoader('.'))
-
     folium_map, all_tracks, max_speed, map_id = create_map(
         gpx_files, names, args.max_speed,
         start_time=args.start, end_time=args.end,
@@ -284,10 +447,13 @@ def main():
     if not all_tracks:
         print("No GPX points found in the selected time window; nothing to render.")
         return
-    add_animation(folium_map, all_tracks, env, args.title, map_id)
-
-    add_legend(folium_map, max_speed, env)
-    add_boat_legend(folium_map, [t['display_name'] for t in all_tracks], env)
+    add_playback_controls(
+        folium_map,
+        all_tracks,
+        max_speed=max_speed,
+        map_id=map_id,
+        title=args.title,
+    )
 
     folium_map.save('boat_tracks.html')
     print('Map has been saved to boat_tracks.html')

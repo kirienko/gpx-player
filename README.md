@@ -55,6 +55,56 @@ python -m gpx_player.openseamap --title 'Gin Sul Regatta 2024' --names Alex Yury
      --files example-data/osm-demo-Alex.gpx example-data/osm-demo-Richard.gpx \
              example-data/osm-demo-Yury.gpx
 ```
+This writes a static playable HTML map to `boat_tracks.html` with the title,
+speed legend, boat stats legend, play/pause button, moving markers, and time
+slider.
+
+The same playable OpenSeaMap can be created from Python code:
+```python
+from gpx_player.openseamap import create_playback_map
+
+folium_map = create_playback_map(
+    [
+        "example-data/osm-demo-Alex.gpx",
+        "example-data/osm-demo-Richard.gpx",
+        "example-data/osm-demo-Yury.gpx",
+    ],
+    names=["Alex", "Richard", "Yury"],
+    max_speed=12,
+    title="Gin Sul Regatta 2024",
+)
+folium_map.save("boat_tracks.html")
+```
+
+Playback templates and JavaScript are bundled as package assets, so downstream
+applications can call this API from any current working directory after
+`pip install gpx-player`; no source checkout or local asset copies are needed.
+
+### OpenStreetMap tile access
+
+The generated HTML uses live raster tiles from `tile.openstreetmap.org` for
+the base map and an OpenSeaMap seamark overlay. OpenStreetMap data is open, but
+the public OSM tile servers are a shared service with a
+[tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+In particular, browser requests from web pages must send a valid HTTP
+`Referer` header.
+
+If you open a generated map directly as a local `file://.../boat_tracks.html`
+file, many browsers will not send a valid HTTP `Referer` for tile requests.
+OSM may then return "blocked" placeholder tiles linking to
+`https://osm.wiki/blocked`. This can happen even for an old HTML file that
+works normally when hosted on a website.
+
+For local viewing, serve the directory over HTTP instead:
+```bash
+python3 -m http.server 8000
+```
+Then open `http://localhost:8000/boat_tracks.html` in the browser.
+
+For public or production applications, do not rely on the community
+`tile.openstreetmap.org` service as an application tile backend. Host the HTML
+on a normal web origin and use a tile provider, self-hosted tiles, or vector
+tiles whose terms fit your traffic and offline/static distribution needs.
 
 Restrict the map to a specific time window with `--start` / `--end` (same
 format as in video mode). Speed, distance, map bounds and the animation
