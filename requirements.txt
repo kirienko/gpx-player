@@ -8,4 +8,3 @@ pytest-cov
 pytest
 pytz
 setuptools>=61
-wheel

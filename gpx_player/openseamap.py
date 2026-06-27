@@ -282,6 +282,7 @@ def _add_animation_script(
     time_range = (max_time - min_time).total_seconds()
     payload = {
         "mapId": map_id,
+        "colors": _TRACK_COLORS,
         "points": gpx_points_data,
         "speeds": gpx_speeds_data,
         "distances": gpx_distances_data,

@@ -1,8 +1,6 @@
 (function () {
     "use strict";
 
-    const colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta'];
-
     function registry() {
         window.gpxPlayerPlayback = window.gpxPlayerPlayback || {};
         return window.gpxPlayerPlayback;
@@ -114,7 +112,7 @@
 
     function initializeTrackMarkers(map, state) {
         return state.points.map((track, index) => {
-            const color = colors[index % colors.length];
+            const color = state.colors[index % state.colors.length];
             const marker = L.circleMarker([track[0].lat, track[0].lon], {
                 radius: 4,
                 color: color,
