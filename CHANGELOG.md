@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to **gpx-player** will be documented in this file.
 
+## 0.4.1 — 2026-06-28
+* Restore emoji play/pause glyphs in the reusable playback controls.
+* Reintroduce visible playback-slider progress styling.
+* Add optional Python API arguments to customize active/inactive slider colors.
+
 ## 0.1.0 – 2025-06-01
 * First public release on PyPI.
 * CLI `gpx-player` to create animated videos/GIFs from GPX files.

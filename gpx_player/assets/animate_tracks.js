@@ -40,6 +40,7 @@
         document.body.appendChild(timeLegend);
 
         slider.addEventListener('input', () => {
+            updateSliderVisual(state);
             updateTrackMarkers(state);
             updateTimeDisplay(state);
             updateBoatLegend(state);
@@ -66,7 +67,99 @@
             width: '80%',
             zIndex: 1000,
         });
+        applySliderTheme(state, slider);
+        updateSliderProgress(slider);
         return slider;
+    }
+
+    function cssEscape(value) {
+        if (window.CSS && typeof window.CSS.escape === 'function') {
+            return window.CSS.escape(value);
+        }
+        return String(value).replace(/([^\w-])/g, '\\$1');
+    }
+
+    function applySliderTheme(state, slider) {
+        const styleId = `${state.sliderId}-theme`;
+        if (!document.getElementById(styleId)) {
+            const sliderSelector = `#${cssEscape(state.sliderId)}`;
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+${sliderSelector} {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    height: 24px;
+}
+${sliderSelector}:focus {
+    outline: 2px solid #ffffff;
+    outline-offset: 4px;
+}
+${sliderSelector}:focus-visible {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);
+}
+${sliderSelector}::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(
+        to right,
+        var(--gpx-slider-active-color) 0%,
+        var(--gpx-slider-active-color) var(--gpx-slider-progress),
+        var(--gpx-slider-inactive-color) var(--gpx-slider-progress),
+        var(--gpx-slider-inactive-color) 100%
+    );
+}
+${sliderSelector}::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    margin-top: -9px;
+    border: 1px solid #bdbdbd;
+    border-radius: 50%;
+    background: #ffffff;
+}
+${sliderSelector}::-moz-range-track {
+    height: 6px;
+    border: none;
+    border-radius: 999px;
+    background: var(--gpx-slider-inactive-color);
+}
+${sliderSelector}::-moz-range-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--gpx-slider-active-color);
+}
+${sliderSelector}::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border: 1px solid #bdbdbd;
+    border-radius: 50%;
+    background: #ffffff;
+}
+`;
+            document.head.appendChild(style);
+        }
+
+        slider.style.setProperty('--gpx-slider-active-color', state.sliderActiveColor || '#6e6e6e');
+        slider.style.setProperty('--gpx-slider-inactive-color', state.sliderInactiveColor || '#d0d0d0');
+    }
+
+    function updateSliderProgress(slider) {
+        const min = parseInt(slider.min, 10) || 0;
+        const max = parseInt(slider.max, 10) || 0;
+        const value = parseInt(slider.value, 10) || 0;
+        const progress = max > min ? ((value - min) / (max - min)) * 100 : 0;
+        slider.style.setProperty('--gpx-slider-progress', `${progress}%`);
+    }
+
+    function updateSliderVisual(state) {
+        if (!state.slider) {
+            return;
+        }
+        updateSliderProgress(state.slider);
     }
 
     function createTimeLegend(state, slider) {
@@ -97,7 +190,7 @@
         playPauseButton.id = state.playPauseButtonId;
         playPauseButton.className = 'gpx-player-play-pause';
         playPauseButton.type = 'button';
-        playPauseButton.textContent = 'Play';
+        playPauseButton.textContent = '⏯️';
         playPauseButton.setAttribute('aria-label', 'Play GPX animation');
         playPauseButton.title = 'Play GPX animation';
         playPauseButton.style.marginTop = '5px';
@@ -206,7 +299,7 @@
         } else {
             state.playbackInterval = setInterval(() => updateSlider(state), 100);
             playPauseButton.style.backgroundColor = 'gray';
-            playPauseButton.textContent = 'Pause';
+            playPauseButton.textContent = '⏸️';
             playPauseButton.setAttribute('aria-label', 'Pause GPX animation');
             playPauseButton.title = 'Pause GPX animation';
             state.isPlaying = true;
@@ -219,7 +312,7 @@
             return;
         }
         playPauseButton.style.backgroundColor = '';
-        playPauseButton.textContent = 'Play';
+        playPauseButton.textContent = '⏯️';
         playPauseButton.setAttribute('aria-label', 'Play GPX animation');
         playPauseButton.title = 'Play GPX animation';
     }

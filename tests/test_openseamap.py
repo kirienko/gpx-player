@@ -165,10 +165,21 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert "window.gpxPlayerPlayback" in rendered
     assert "gpx-player-time-slider" in rendered
     assert "gpx-player-play-pause" in rendered
+    assert "⏯️" in rendered
+    assert "⏸️" in rendered
     assert "Speed (knots)" in rendered
     assert "Distance / Speed / Avg" in rendered
     assert "Race" in rendered
     assert "Boat" in rendered
+    assert "sliderActiveColor" in rendered
+    assert '"#6e6e6e"' in rendered
+    assert "sliderInactiveColor" in rendered
+    assert '"#d0d0d0"' in rendered
+    assert "linear-gradient(" in rendered
+    assert "--gpx-slider-progress" in rendered
+    assert "outline: 2px solid #ffffff;" in rendered
+    assert "outline-offset: 4px;" in rendered
+    assert "box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);" in rendered
     assert '</script><script>alert(1)</script>' not in rendered
     assert '</script><script>alert(2)</script>' not in rendered
     assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in rendered
@@ -195,6 +206,22 @@ def test_create_playback_map_renders_multi_track_boat_legend():
     assert 'data-index="0"' in rendered
     assert 'data-index="1"' in rendered
     assert rendered.count('class="boat-entry"') == 2
+
+
+def test_create_playback_map_renders_custom_slider_colors():
+    path, _ = _write_sample_gpx(n_points=4, track_name="Track One")
+
+    folium_map = create_playback_map(
+        [path],
+        max_speed=12.0,
+        slider_active_color="#112233",
+        slider_inactive_color="rgb(210, 220, 230)",
+    )
+
+    rendered = folium_map.get_root().render()
+
+    assert '"sliderActiveColor": "#112233"' in rendered
+    assert '"sliderInactiveColor": "rgb(210, 220, 230)"' in rendered
 
 
 def test_wheel_includes_playback_assets(tmp_path):

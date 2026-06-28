@@ -19,6 +19,8 @@ from gpx_player.utils import track_serializer
 _ASSET_PACKAGE = "gpx_player.assets"
 _TRACK_COLORS = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
 _COMPACT_TZ_RE = re.compile(r"([+-]\d{2})(\d{2})$")
+_DEFAULT_SLIDER_ACTIVE_COLOR = "#6e6e6e"
+_DEFAULT_SLIDER_INACTIVE_COLOR = "#d0d0d0"
 
 
 def _read_asset_text(filename: str) -> str:
@@ -271,6 +273,8 @@ def _add_animation_script(
     title: Optional[str],
     map_id: str,
     boat_legend_id: str,
+    slider_active_color: Optional[str] = None,
+    slider_inactive_color: Optional[str] = None,
 ) -> None:
     gpx_points_data = [track['points'] for track in all_tracks]
     gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
@@ -297,6 +301,8 @@ def _add_animation_script(
         "timeLegendId": f"gpx-player-time-legend-{map_id}",
         "playPauseButtonId": f"gpx-player-play-pause-{map_id}",
         "boatLegendId": boat_legend_id,
+        "sliderActiveColor": slider_active_color or _DEFAULT_SLIDER_ACTIVE_COLOR,
+        "sliderInactiveColor": slider_inactive_color or _DEFAULT_SLIDER_INACTIVE_COLOR,
     }
     map_id_json = _json_for_inline_script(map_id)
     payload_json = _json_for_inline_script(payload)
@@ -331,6 +337,8 @@ def add_playback_controls(
     max_speed: float,
     map_id: str,
     title: Optional[str] = None,
+    slider_active_color: Optional[str] = _DEFAULT_SLIDER_ACTIVE_COLOR,
+    slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR,
 ) -> None:
     """Add playback UI, legends, markers, and data to a Folium map.
 
@@ -348,6 +356,8 @@ def add_playback_controls(
         title=title,
         map_id=map_id,
         boat_legend_id=boat_legend_id,
+        slider_active_color=slider_active_color,
+        slider_inactive_color=slider_inactive_color,
     )
     if title:
         _add_header(folium_map, title, map_id, env)
@@ -368,6 +378,8 @@ def create_playback_map(
     title: Optional[str] = None,
     start_time: Optional[dt.datetime] = None,
     end_time: Optional[dt.datetime] = None,
+    slider_active_color: Optional[str] = _DEFAULT_SLIDER_ACTIVE_COLOR,
+    slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR,
 ) -> folium.Map:
     """Create a static OpenSeaMap with GPX playback controls."""
     folium_map, all_tracks, actual_max_speed, map_id = create_map(
@@ -383,6 +395,8 @@ def create_playback_map(
         max_speed=actual_max_speed,
         map_id=map_id,
         title=title,
+        slider_active_color=slider_active_color,
+        slider_inactive_color=slider_inactive_color,
     )
     return folium_map
 
@@ -390,7 +404,10 @@ def create_playback_map(
 def add_animation(folium_map: folium.Map,
                   all_tracks: List[dict],
                   jinja_env: Optional[jinja2.Environment] = None,
-                  title: Optional[str] = None, map_id: Optional[str] = None) -> None:
+                  title: Optional[str] = None,
+                  map_id: Optional[str] = None,
+                  slider_active_color: Optional[str] = _DEFAULT_SLIDER_ACTIVE_COLOR,
+                  slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR) -> None:
     """Backward-compatible wrapper for adding playback animation assets."""
     if not all_tracks:
         return
@@ -401,6 +418,8 @@ def add_animation(folium_map: folium.Map,
         title=title,
         map_id=map_id,
         boat_legend_id="boat-legend",
+        slider_active_color=slider_active_color,
+        slider_inactive_color=slider_inactive_color,
     )
     if title:
         _add_header(folium_map, title, map_id, jinja_env)
