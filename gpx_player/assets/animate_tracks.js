@@ -94,7 +94,11 @@ ${sliderSelector} {
     height: 24px;
 }
 ${sliderSelector}:focus {
-    outline: none;
+    outline: 2px solid #ffffff;
+    outline-offset: 4px;
+}
+${sliderSelector}:focus-visible {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);
 }
 ${sliderSelector}::-webkit-slider-runnable-track {
     height: 6px;

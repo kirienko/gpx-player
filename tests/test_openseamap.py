@@ -177,6 +177,9 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert '"#d0d0d0"' in rendered
     assert "linear-gradient(" in rendered
     assert "--gpx-slider-progress" in rendered
+    assert "outline: 2px solid #ffffff;" in rendered
+    assert "outline-offset: 4px;" in rendered
+    assert "box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);" in rendered
     assert '</script><script>alert(1)</script>' not in rendered
     assert '</script><script>alert(2)</script>' not in rendered
     assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in rendered
