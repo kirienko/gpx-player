@@ -72,9 +72,14 @@ folium_map = create_playback_map(
     names=["Alex", "Richard", "Yury"],
     max_speed=12,
     title="Gin Sul Regatta 2024",
+    slider_active_color="#6e6e6e",
+    slider_inactive_color="#d0d0d0",
 )
 folium_map.save("boat_tracks.html")
 ```
+
+`slider_active_color` and `slider_inactive_color` are optional Python-only
+arguments for theming the played and unplayed sections of the playback slider.
 
 Playback templates and JavaScript are bundled as package assets, so downstream
 applications can call this API from any current working directory after
