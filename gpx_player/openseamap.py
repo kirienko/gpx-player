@@ -4,7 +4,7 @@ import json
 import re
 from html import escape as html_escape
 from importlib import resources
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import folium
 import gpxpy
@@ -21,6 +21,11 @@ _TRACK_COLORS = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'y
 _COMPACT_TZ_RE = re.compile(r"([+-]\d{2})(\d{2})$")
 _DEFAULT_SLIDER_ACTIVE_COLOR = "#6e6e6e"
 _DEFAULT_SLIDER_INACTIVE_COLOR = "#d0d0d0"
+_TAIL_LENGTH_PRESETS = {
+    "short": 30,
+    "normal": 60,
+    "long": 120,
+}
 
 
 def _read_asset_text(filename: str) -> str:
@@ -58,6 +63,32 @@ def _boat_legend_id(map_id: Optional[str]) -> str:
     return f"gpx-player-boat-legend-{map_id}" if map_id else "boat-legend"
 
 
+def _resolve_tail_point_count(tail_length: str) -> int:
+    try:
+        return _TAIL_LENGTH_PRESETS[tail_length]
+    except KeyError:
+        choices = ", ".join(_TAIL_LENGTH_PRESETS)
+        raise ValueError(f"tail_length must be one of: {choices}") from None
+
+
+def _normalize_track_layer_names(
+    all_tracks: List[dict],
+    track_layer_names: Optional[Sequence[Optional[str]]],
+) -> List[Optional[str]]:
+    if track_layer_names is None:
+        names = [track.get('track_layer_name') for track in all_tracks]
+    elif isinstance(track_layer_names, str):
+        names = [track_layer_names]
+    elif isinstance(track_layer_names, bytes):
+        raise TypeError("track_layer_names must be a sequence of strings, not bytes")
+    else:
+        names = list(track_layer_names)
+    normalized = [str(name) if name else None for name in names]
+    if len(normalized) < len(all_tracks):
+        normalized.extend([None] * (len(all_tracks) - len(normalized)))
+    return normalized[:len(all_tracks)]
+
+
 def _parse_iso_datetime(s: str) -> dt.datetime:
     # fromisoformat accepts fractional seconds and common ISO variants;
     # normalise a trailing 'Z' to '+00:00' for Python < 3.11 compatibility.
@@ -78,6 +109,10 @@ def parse_arguments():
     parser.add_argument('--end', '-e',
                         type=_parse_iso_datetime,
                         help='End time (ISO 8601 with timezone, e.g. 2026-04-12T17:33:00+0200)')
+    parser.add_argument('--tail-length',
+                        choices=tuple(_TAIL_LENGTH_PRESETS),
+                        default='normal',
+                        help='Tail length preset for map playback mode: short, normal, or long (default: normal)')
     return parser.parse_args()
 
 
@@ -166,6 +201,8 @@ def create_map(
     max_speed: float,
     start_time: Optional[dt.datetime] = None,
     end_time: Optional[dt.datetime] = None,
+    *,
+    show_layer_control: bool = True,
 ) -> Tuple[folium.Map, List[dict], float, str]:
     """Create an interactive map from GPX files.
 
@@ -259,9 +296,11 @@ def create_map(
                 tooltip=folium.Tooltip(tooltip_content)
             ).add_to(track_layer)
         track_layers.append(track_layer)
+        track['track_layer_name'] = track_layer.get_name()
         folium_map.add_child(track_layer)
     
-    folium.LayerControl(collapsed=False).add_to(folium_map)
+    if show_layer_control:
+        folium.LayerControl(collapsed=False).add_to(folium_map)
 
     return folium_map, all_tracks, max_speed, map_id
 
@@ -275,12 +314,15 @@ def _add_animation_script(
     boat_legend_id: str,
     slider_active_color: Optional[str] = None,
     slider_inactive_color: Optional[str] = None,
+    tail_point_count: int = _TAIL_LENGTH_PRESETS["normal"],
+    track_layer_names: Optional[Sequence[Optional[str]]] = None,
 ) -> None:
     gpx_points_data = [track['points'] for track in all_tracks]
     gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
     gpx_distances_data = [track['distances'] for track in all_tracks]
     gpx_avg_speeds_data = [track['avg_speeds'] for track in all_tracks]
     track_names = [_display_name(track) for track in all_tracks]
+    full_track_layer_names = _normalize_track_layer_names(all_tracks, track_layer_names)
     gpx_timestamps = sorted({p['time'] for track in all_tracks for p in track['points']})
     min_time, max_time = min(gpx_timestamps), max(gpx_timestamps)
     time_range = (max_time - min_time).total_seconds()
@@ -303,6 +345,8 @@ def _add_animation_script(
         "boatLegendId": boat_legend_id,
         "sliderActiveColor": slider_active_color or _DEFAULT_SLIDER_ACTIVE_COLOR,
         "sliderInactiveColor": slider_inactive_color or _DEFAULT_SLIDER_INACTIVE_COLOR,
+        "tailPointCount": tail_point_count,
+        "fullTrackLayerNames": full_track_layer_names,
     }
     map_id_json = _json_for_inline_script(map_id)
     payload_json = _json_for_inline_script(payload)
@@ -339,12 +383,15 @@ def add_playback_controls(
     title: Optional[str] = None,
     slider_active_color: Optional[str] = _DEFAULT_SLIDER_ACTIVE_COLOR,
     slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR,
+    tail_length: str = "normal",
+    track_layer_names: Optional[Sequence[Optional[str]]] = None,
 ) -> None:
     """Add playback UI, legends, markers, and data to a Folium map.
 
     The templates and JavaScript are loaded from package resources, so this
     works from an installed wheel regardless of the current working directory.
     """
+    tail_point_count = _resolve_tail_point_count(tail_length)
     if not all_tracks:
         return
 
@@ -358,6 +405,8 @@ def add_playback_controls(
         boat_legend_id=boat_legend_id,
         slider_active_color=slider_active_color,
         slider_inactive_color=slider_inactive_color,
+        tail_point_count=tail_point_count,
+        track_layer_names=track_layer_names,
     )
     if title:
         _add_header(folium_map, title, map_id, env)
@@ -380,14 +429,17 @@ def create_playback_map(
     end_time: Optional[dt.datetime] = None,
     slider_active_color: Optional[str] = _DEFAULT_SLIDER_ACTIVE_COLOR,
     slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR,
+    tail_length: str = "normal",
 ) -> folium.Map:
     """Create a static OpenSeaMap with GPX playback controls."""
+    _resolve_tail_point_count(tail_length)
     folium_map, all_tracks, actual_max_speed, map_id = create_map(
         gpx_files,
         names,
         max_speed,
         start_time=start_time,
         end_time=end_time,
+        show_layer_control=False,
     )
     add_playback_controls(
         folium_map,
@@ -397,6 +449,7 @@ def create_playback_map(
         title=title,
         slider_active_color=slider_active_color,
         slider_inactive_color=slider_inactive_color,
+        tail_length=tail_length,
     )
     return folium_map
 
@@ -407,8 +460,10 @@ def add_animation(folium_map: folium.Map,
                   title: Optional[str] = None,
                   map_id: Optional[str] = None,
                   slider_active_color: Optional[str] = _DEFAULT_SLIDER_ACTIVE_COLOR,
-                  slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR) -> None:
+                  slider_inactive_color: Optional[str] = _DEFAULT_SLIDER_INACTIVE_COLOR,
+                  tail_length: str = "normal") -> None:
     """Backward-compatible wrapper for adding playback animation assets."""
+    tail_point_count = _resolve_tail_point_count(tail_length)
     if not all_tracks:
         return
     map_id = map_id or folium_map.get_name()
@@ -420,6 +475,7 @@ def add_animation(folium_map: folium.Map,
         boat_legend_id="boat-legend",
         slider_active_color=slider_active_color,
         slider_inactive_color=slider_inactive_color,
+        tail_point_count=tail_point_count,
     )
     if title:
         _add_header(folium_map, title, map_id, jinja_env)
@@ -462,6 +518,7 @@ def main():
     folium_map, all_tracks, max_speed, map_id = create_map(
         gpx_files, names, args.max_speed,
         start_time=args.start, end_time=args.end,
+        show_layer_control=False,
     )
     if not all_tracks:
         print("No GPX points found in the selected time window; nothing to render.")
@@ -472,6 +529,7 @@ def main():
         max_speed=max_speed,
         map_id=map_id,
         title=args.title,
+        tail_length=args.tail_length,
     )
 
     folium_map.save('boat_tracks.html')

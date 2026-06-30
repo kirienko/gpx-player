@@ -1,6 +1,8 @@
 (function () {
     "use strict";
 
+    const TRACK_MODES = ["full", "tail", "off"];
+
     function registry() {
         window.gpxPlayerPlayback = window.gpxPlayerPlayback || {};
         return window.gpxPlayerPlayback;
@@ -23,30 +25,45 @@
             return;
         }
 
+        state.initialized = true;
+        state.map = map;
+        state.isPlaying = false;
+        state.playbackInterval = null;
+        state.trackTimeValues = initializeTrackTimeValues(state);
+        state.currentPointIndexes = state.points.map(() => 0);
+        state.trackModes = state.points.map(() => "full");
+        state.fullTrackLayers = initializeFullTrackLayers(state);
+        state.trackHeadings = initializeTrackHeadings(state);
+
         const slider = createSlider(state);
         const timeLegend = createTimeLegend(state, slider);
         const boatLegend = document.getElementById(state.boatLegendId);
         const trackMarkers = initializeTrackMarkers(map, state);
+        const tailLayers = initializeTailLayers(state);
+        const visibilityControl = createTrackVisibilityControl(state);
 
-        state.initialized = true;
-        state.isPlaying = false;
-        state.playbackInterval = null;
         state.slider = slider;
         state.timeLegend = timeLegend;
         state.boatLegend = boatLegend;
         state.trackMarkers = trackMarkers;
+        state.tailLayers = tailLayers;
+        state.visibilityControl = visibilityControl;
 
         document.body.appendChild(slider);
         document.body.appendChild(timeLegend);
+        visibilityControl.addTo(map);
 
         slider.addEventListener('input', () => {
             updateSliderVisual(state);
+            updateCurrentPointIndexes(state);
             updateTrackMarkers(state);
+            updateTailLayers(state);
             updateTimeDisplay(state);
             updateBoatLegend(state);
         });
 
         slider.dispatchEvent(new Event('input'));
+        state.trackModes.forEach((_mode, trackIndex) => applyTrackMode(state, trackIndex));
     }
 
     function createSlider(state) {
@@ -203,17 +220,183 @@ ${sliderSelector}::-moz-range-thumb {
         return timeLegend;
     }
 
+    function initializeTrackTimeValues(state) {
+        return state.points.map((track) => track.map((point) => new Date(point.time).getTime()));
+    }
+
+    function initializeFullTrackLayers(state) {
+        const names = state.fullTrackLayerNames || [];
+        return state.points.map((_track, index) => {
+            const name = names[index];
+            const layer = name ? window[name] : null;
+            return isLeafletLayer(layer) ? layer : null;
+        });
+    }
+
+    function isLeafletLayer(candidate) {
+        return candidate && typeof candidate.addTo === 'function';
+    }
+
     function initializeTrackMarkers(map, state) {
         return state.points.map((track, index) => {
             const color = state.colors[index % state.colors.length];
-            const marker = L.circleMarker([track[0].lat, track[0].lon], {
-                radius: 4,
-                color: color,
-                fillColor: color,
-                fillOpacity: 0.5
+            const marker = L.marker([track[0].lat, track[0].lon], {
+                icon: createTrackMarkerIcon(color, state.trackHeadings[index] || 0),
+                interactive: false,
+                keyboard: false
             }).addTo(map);
+            marker._gpxPlayerColor = color;
             return marker;
         });
+    }
+
+    function createTrackMarkerIcon(color, heading) {
+        return L.divIcon({
+            className: 'gpx-player-direction-marker-icon',
+            html: `<div class="gpx-player-direction-marker" style="
+                width: 0;
+                height: 0;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-bottom: 13px solid ${color};
+                transform: rotate(${heading}deg);
+                transform-origin: 50% 60%;
+            "></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
+        });
+    }
+
+    function initializeTrackHeadings(state) {
+        return state.points.map((track) => trackHeadingAtIndex(track, 0, 0));
+    }
+
+    function initializeTailLayers(state) {
+        return state.points.map((_track, index) => {
+            const color = state.colors[index % state.colors.length];
+            return L.polyline([], {
+                color: color,
+                weight: 3,
+                opacity: 0.9,
+                interactive: false
+            });
+        });
+    }
+
+    function createTrackVisibilityControl(state) {
+        const control = L.control({position: 'topright'});
+        control.onAdd = () => {
+            const container = L.DomUtil.create('div', 'leaflet-control gpx-player-track-visibility');
+            container.id = `gpx-player-track-visibility-${state.mapId}`;
+            Object.assign(container.style, {
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                border: '1px solid white',
+                borderRadius: '5px',
+                color: 'white',
+                fontSize: '10px',
+                padding: '2px 3px',
+                width: '128px',
+                maxWidth: 'calc(100vw - 20px)',
+                boxSizing: 'border-box',
+            });
+            L.DomEvent.disableClickPropagation(container);
+            if (L.DomEvent.disableScrollPropagation) {
+                L.DomEvent.disableScrollPropagation(container);
+            }
+
+            const title = document.createElement('div');
+            title.textContent = 'Tracks';
+            Object.assign(title.style, {
+                fontWeight: '600',
+                marginBottom: '2px',
+            });
+            container.appendChild(title);
+
+            state.trackModeControls = [];
+            state.trackNames.forEach((name, trackIndex) => {
+                const row = document.createElement('div');
+                row.className = 'gpx-player-track-visibility-row';
+                Object.assign(row.style, {
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto',
+                    gap: '3px',
+                    alignItems: 'center',
+                    marginTop: trackIndex === 0 ? '0' : '2px',
+                });
+
+                const label = document.createElement('span');
+                Object.assign(label.style, {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                });
+                const dot = document.createElement('span');
+                dot.textContent = '●';
+                dot.style.color = state.colors[trackIndex % state.colors.length];
+                label.appendChild(dot);
+                label.appendChild(document.createTextNode(` ${name}`));
+                row.appendChild(label);
+
+                const selectWrap = document.createElement('span');
+                Object.assign(selectWrap.style, {
+                    position: 'relative',
+                    display: 'inline-block',
+                    width: '38px',
+                });
+
+                const select = document.createElement('select');
+                select.className = 'gpx-player-track-mode-select';
+                select.setAttribute('aria-label', `${name}: track visibility`);
+                select.title = `${name}: track visibility`;
+                Object.assign(select.style, {
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none',
+                    border: '1px solid white',
+                    borderRadius: '3px',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    lineHeight: '1.2',
+                    width: '38px',
+                    padding: '1px 8px 1px 2px',
+                    boxSizing: 'border-box',
+                });
+                TRACK_MODES.forEach((mode) => {
+                    const option = document.createElement('option');
+                    option.value = mode;
+                    option.textContent = mode === 'full' ? 'Full' : mode === 'tail' ? 'Tail' : 'Off';
+                    option.style.color = '#222';
+                    option.style.background = 'white';
+                    select.appendChild(option);
+                });
+                L.DomEvent.on(select, 'change', () => setTrackMode(state, trackIndex, select.value));
+                state.trackModeControls[trackIndex] = select;
+
+                const arrow = document.createElement('span');
+                arrow.textContent = '▾';
+                Object.assign(arrow.style, {
+                    position: 'absolute',
+                    right: '3px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'white',
+                    fontSize: '8px',
+                    lineHeight: '1',
+                    pointerEvents: 'none',
+                });
+
+                selectWrap.appendChild(select);
+                selectWrap.appendChild(arrow);
+                row.appendChild(selectWrap);
+                container.appendChild(row);
+                updateTrackModeControl(state, trackIndex);
+            });
+
+            return container;
+        };
+        return control;
     }
 
     function sliderTimeIndex(state) {
@@ -229,26 +412,114 @@ ${sliderSelector}::-moz-range-thumb {
         return new Date(state.timestamps[timeIndex]).getTime();
     }
 
-    function updateTrackMarkers(state) {
-        const currentTime = currentSliderTime(state);
+    function pointIndexAtTime(times, currentTime) {
+        if (!times.length || currentTime < times[0]) {
+            return 0;
+        }
+        let low = 0;
+        let high = times.length - 1;
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (times[mid] <= currentTime) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return Math.max(0, high);
+    }
 
+    function updateCurrentPointIndexes(state) {
+        const currentTime = currentSliderTime(state);
+        state.currentTime = currentTime;
+        state.currentPointIndexes = state.trackTimeValues.map((times) => pointIndexAtTime(times, currentTime));
+    }
+
+    function updateTrackMarkers(state) {
+        const map = state.map;
         state.trackMarkers.forEach((marker, trackIndex) => {
             const track = state.points[trackIndex];
-            let closestPoint = track[0];
-            for (let i = 1; i < track.length; i++) {
-                const pointTime = new Date(track[i].time).getTime();
-                if (pointTime <= currentTime) {
-                    closestPoint = track[i];
-                } else {
-                    break;
-                }
-            }
+            const pointIndex = state.currentPointIndexes[trackIndex] || 0;
+            const closestPoint = track[pointIndex] || track[0];
+            const heading = trackHeadingAtIndex(track, pointIndex, state.trackHeadings[trackIndex] || 0);
+            state.trackHeadings[trackIndex] = heading;
             marker.setLatLng([closestPoint.lat, closestPoint.lon]);
+            updateTrackMarkerHeading(marker, heading);
+            if (state.trackModes[trackIndex] === 'off') {
+                if (map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                }
+            } else if (!map.hasLayer(marker)) {
+                marker.addTo(map);
+            }
+        });
+    }
+
+    function trackHeadingAtIndex(track, pointIndex, fallbackHeading) {
+        const point = track[pointIndex] || track[0];
+        if (!point) {
+            return fallbackHeading || 0;
+        }
+        for (let i = pointIndex - 1; i >= 0; i--) {
+            if (hasMovement(track[i], point)) {
+                return headingBetween(track[i], point);
+            }
+        }
+        for (let i = pointIndex + 1; i < track.length; i++) {
+            if (hasMovement(point, track[i])) {
+                return headingBetween(point, track[i]);
+            }
+        }
+        return fallbackHeading || 0;
+    }
+
+    function hasMovement(fromPoint, toPoint) {
+        if (!fromPoint || !toPoint) {
+            return false;
+        }
+        return fromPoint.lat !== toPoint.lat || fromPoint.lon !== toPoint.lon;
+    }
+
+    function headingBetween(fromPoint, toPoint) {
+        const dx = toPoint.lon - fromPoint.lon;
+        const dy = toPoint.lat - fromPoint.lat;
+        const heading = Math.atan2(dx, dy) * 180 / Math.PI;
+        return (heading + 360) % 360;
+    }
+
+    function updateTrackMarkerHeading(marker, heading) {
+        const element = marker.getElement && marker.getElement();
+        const arrow = element && element.querySelector && element.querySelector('.gpx-player-direction-marker');
+        if (arrow) {
+            arrow.style.transform = `rotate(${heading}deg)`;
+        } else if (marker.setIcon) {
+            marker.setIcon(createTrackMarkerIcon(marker._gpxPlayerColor || 'red', heading));
+        }
+    }
+
+    function tailLatLngs(state, trackIndex) {
+        const track = state.points[trackIndex];
+        const pointIndex = state.currentPointIndexes[trackIndex] || 0;
+        const tailPointCount = Math.max(1, parseInt(state.tailPointCount, 10) || 60);
+        const startIndex = Math.max(0, pointIndex - tailPointCount + 1);
+        return track.slice(startIndex, pointIndex + 1).map((point) => [point.lat, point.lon]);
+    }
+
+    function updateTailLayers(state) {
+        const map = state.map;
+        state.tailLayers.forEach((tailLayer, trackIndex) => {
+            if (state.trackModes[trackIndex] !== 'tail') {
+                return;
+            }
+            tailLayer.setLatLngs(tailLatLngs(state, trackIndex));
+            if (!map.hasLayer(tailLayer)) {
+                tailLayer.addTo(map);
+            }
         });
     }
 
     function updateTimeDisplay(state) {
-        const currentTime = currentSliderTime(state);
+        const currentTime = state.currentTime || currentSliderTime(state);
         state.timeDisplay.textContent = new Date(currentTime).toUTCString().replace('GMT', 'UTC');
     }
 
@@ -257,26 +528,84 @@ ${sliderSelector}::-moz-range-thumb {
         if (!legend) {
             return;
         }
-        const currentTime = currentSliderTime(state);
         legend.querySelectorAll('.boat-entry').forEach((entry) => {
             const idx = parseInt(entry.getAttribute('data-index'), 10);
-            const track = state.points[idx];
             const speeds = state.speeds[idx];
             const dists = state.distances[idx];
             const avgs = state.avgSpeeds[idx];
-            let pointIndex = 0;
-            for (let i = 1; i < track.length; i++) {
-                const pointTime = new Date(track[i].time).getTime();
-                if (pointTime <= currentTime) {
-                    pointIndex = i;
-                } else {
-                    break;
-                }
-            }
+            const pointIndex = state.currentPointIndexes[idx] || 0;
             entry.querySelector('.distance').textContent = `${dists[pointIndex].toFixed(1)} nm`;
             entry.querySelector('.speed').textContent = `${speeds[pointIndex].toFixed(1)} kt`;
             entry.querySelector('.avg-speed').textContent = `${avgs[pointIndex].toFixed(1)} kt`;
         });
+    }
+
+    function setTrackMode(state, trackIndex, mode) {
+        if (!TRACK_MODES.includes(mode)) {
+            return;
+        }
+        state.trackModes[trackIndex] = mode;
+        applyTrackMode(state, trackIndex);
+        updateTrackModeControl(state, trackIndex);
+    }
+
+    function applyTrackMode(state, trackIndex) {
+        const map = state.map;
+        const mode = state.trackModes[trackIndex];
+        const fullLayer = state.fullTrackLayers[trackIndex];
+        const tailLayer = state.tailLayers[trackIndex];
+        const marker = state.trackMarkers[trackIndex];
+
+        if (mode === 'full') {
+            if (fullLayer && !map.hasLayer(fullLayer)) {
+                fullLayer.addTo(map);
+            }
+            if (tailLayer) {
+                tailLayer.setLatLngs([]);
+                if (map.hasLayer(tailLayer)) {
+                    map.removeLayer(tailLayer);
+                }
+            }
+            if (marker && !map.hasLayer(marker)) {
+                marker.addTo(map);
+            }
+            return;
+        }
+
+        if (fullLayer && map.hasLayer(fullLayer)) {
+            map.removeLayer(fullLayer);
+        }
+
+        if (mode === 'tail') {
+            if (marker && !map.hasLayer(marker)) {
+                marker.addTo(map);
+            }
+            if (tailLayer) {
+                tailLayer.setLatLngs(tailLatLngs(state, trackIndex));
+                if (!map.hasLayer(tailLayer)) {
+                    tailLayer.addTo(map);
+                }
+            }
+            return;
+        }
+
+        if (tailLayer) {
+            tailLayer.setLatLngs([]);
+            if (map.hasLayer(tailLayer)) {
+                map.removeLayer(tailLayer);
+            }
+        }
+        if (marker && map.hasLayer(marker)) {
+            map.removeLayer(marker);
+        }
+    }
+
+    function updateTrackModeControl(state, trackIndex) {
+        const control = state.trackModeControls && state.trackModeControls[trackIndex];
+        if (!control) {
+            return;
+        }
+        control.value = state.trackModes[trackIndex];
     }
 
     function updateSlider(state) {

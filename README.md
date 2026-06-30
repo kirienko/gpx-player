@@ -58,6 +58,9 @@ python -m gpx_player.openseamap --title 'Gin Sul Regatta 2024' --names Alex Yury
 This writes a static playable HTML map to `boat_tracks.html` with the title,
 speed legend, boat stats legend, play/pause button, moving markers, and time
 slider.
+Playback maps also include a per-boat track visibility control. Each boat can
+show the full speed-coloured track, show only a moving tail in the boat colour,
+or hide both the track and marker.
 
 The same playable OpenSeaMap can be created from Python code:
 ```python
@@ -74,12 +77,15 @@ folium_map = create_playback_map(
     title="Gin Sul Regatta 2024",
     slider_active_color="#6e6e6e",
     slider_inactive_color="#d0d0d0",
+    tail_length="normal",
 )
 folium_map.save("boat_tracks.html")
 ```
 
 `slider_active_color` and `slider_inactive_color` are optional Python-only
 arguments for theming the played and unplayed sections of the playback slider.
+`tail_length` controls the point-based tail length in map playback mode:
+`short` keeps 30 points, `normal` keeps 60 points, and `long` keeps 120 points.
 
 Playback templates and JavaScript are bundled as package assets, so downstream
 applications can call this API from any current working directory after
@@ -118,6 +124,8 @@ slider all reflect only the filtered segment:
 python -m gpx_player.openseamap --files example-data/osm-demo-Alex.gpx \
      --start 2024-07-24T18:10:00+0200 --end 2024-07-24T18:30:00+0200
 ```
+Use `--tail-length short|normal|long` to control the moving tail length in the
+map track visibility control.
 
 A more sophisticated example, that produced a video above:
 ```bash

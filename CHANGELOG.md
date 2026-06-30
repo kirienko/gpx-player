@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to **gpx-player** will be documented in this file.
 
+## 0.5.0 — 2026-06-30
+* **Map mode**: replace the static circle marker with a directional arrow that rotates to show the vessel's current heading.
+* **Map mode**: add a track tail with configurable length (`--tail-length short|normal|long`); a per-track full/tail/off selector lets users toggle each track's display mode during playback.
+* Add a per-track visibility control panel on the map (top-right corner).
+
 ## 0.4.1 — 2026-06-28
 * Restore emoji play/pause glyphs in the reusable playback controls.
 * Reintroduce visible playback-slider progress styling.
