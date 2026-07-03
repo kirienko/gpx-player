@@ -547,7 +547,7 @@ ${sliderSelector}::-moz-range-thumb {
             return {
                 lat: firstPoint.lat,
                 lon: firstPoint.lon,
-                heading: movementHeadingForSegment(track, 0, fallbackHeading || 0),
+                heading: movementHeadingForSegment(track, times, 0, fallbackHeading || 0),
             };
         }
         const lastPoint = track[track.length - 1];
@@ -555,7 +555,7 @@ ${sliderSelector}::-moz-range-thumb {
             return {
                 lat: lastPoint.lat,
                 lon: lastPoint.lon,
-                heading: movementHeadingForSegment(track, track.length - 2, fallbackHeading || 0),
+                heading: movementHeadingForSegment(track, times, track.length - 2, fallbackHeading || 0),
             };
         }
 
@@ -569,7 +569,7 @@ ${sliderSelector}::-moz-range-thumb {
             return {
                 lat: startPoint.lat,
                 lon: startPoint.lon,
-                heading: movementHeadingForSegment(track, startIndex, fallbackHeading || 0),
+                heading: movementHeadingForSegment(track, times, startIndex, fallbackHeading || 0),
             };
         }
 
@@ -577,25 +577,25 @@ ${sliderSelector}::-moz-range-thumb {
         return {
             lat: startPoint.lat + (endPoint.lat - startPoint.lat) * ratio,
             lon: startPoint.lon + (endPoint.lon - startPoint.lon) * ratio,
-            heading: movementHeadingForSegment(track, startIndex, fallbackHeading || 0),
+            heading: movementHeadingForSegment(track, times, startIndex, fallbackHeading || 0),
         };
     }
 
-    function movementHeadingForSegment(track, segmentIndex, fallbackHeading) {
+    function movementHeadingForSegment(track, times, segmentIndex, fallbackHeading) {
         if (!track.length) {
             return fallbackHeading || 0;
         }
         const startIndex = clamp(segmentIndex, 0, Math.max(0, track.length - 1));
-        if (startIndex < track.length - 1 && hasMovement(track[startIndex], track[startIndex + 1])) {
+        if (isUsableHeadingSegment(track, times, startIndex)) {
             return headingBetween(track[startIndex], track[startIndex + 1]);
         }
         for (let i = startIndex; i > 0; i--) {
-            if (hasMovement(track[i - 1], track[i])) {
+            if (isUsableHeadingSegment(track, times, i - 1)) {
                 return headingBetween(track[i - 1], track[i]);
             }
         }
         for (let i = startIndex + 1; i < track.length - 1; i++) {
-            if (hasMovement(track[i], track[i + 1])) {
+            if (isUsableHeadingSegment(track, times, i)) {
                 return headingBetween(track[i], track[i + 1]);
             }
         }
@@ -625,6 +625,20 @@ ${sliderSelector}::-moz-range-thumb {
             return false;
         }
         return fromPoint.lat !== toPoint.lat || fromPoint.lon !== toPoint.lon;
+    }
+
+    function isUsableHeadingSegment(track, times, segmentIndex) {
+        const fromPoint = track[segmentIndex];
+        const toPoint = track[segmentIndex + 1];
+        if (!hasMovement(fromPoint, toPoint)) {
+            return false;
+        }
+        if (!times || segmentIndex < 0 || segmentIndex + 1 >= times.length) {
+            return true;
+        }
+        return Number.isFinite(times[segmentIndex])
+            && Number.isFinite(times[segmentIndex + 1])
+            && times[segmentIndex + 1] > times[segmentIndex];
     }
 
     function headingBetween(fromPoint, toPoint) {

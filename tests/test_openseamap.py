@@ -955,6 +955,142 @@ assert.strictEqual(map.hasLayer(state.trackMarkers[0]), true);
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_playback_js_marker_heading_ignores_duplicate_timestamps_with_movement():
+    if not shutil.which("node"):
+        pytest.skip("node is required for playback JS behavior test")
+
+    asset_path = Path(__file__).resolve().parents[1] / "gpx_player" / "assets" / "animate_tracks.js"
+    playback_js = asset_path.read_text(encoding="utf-8")
+    script = f"""
+const assert = require('assert');
+function makeElement(tag) {{
+  return {{
+    tagName: tag,
+    style: {{ setProperty(name, value) {{ this[name] = value; }} }},
+    children: [],
+    listeners: {{}},
+    appendChild(child) {{ this.children.push(child); return child; }},
+    setAttribute(name, value) {{ this[name] = value; }},
+    addEventListener(type, handler) {{ this.listeners[type] = handler; }},
+    dispatchEvent(event) {{ if (this.listeners[event.type]) this.listeners[event.type](event); }},
+  }};
+}}
+const layers = new Set();
+const map = {{
+  addLayer(layer) {{ layers.add(layer); }},
+  removeLayer(layer) {{ layers.delete(layer); }},
+  hasLayer(layer) {{ return layers.has(layer); }},
+}};
+global.Event = function Event(type) {{ this.type = type; }};
+global.window = global;
+global.map_test = map;
+global.document = {{
+  readyState: 'complete',
+  body: makeElement('body'),
+  head: makeElement('head'),
+  createElement: makeElement,
+  createTextNode(text) {{ return {{ textContent: text }}; }},
+  getElementById() {{ return null; }},
+}};
+global.L = {{
+  divIcon(options) {{
+    return options;
+  }},
+  marker(latlng, options) {{
+    const arrow = {{ style: {{}} }};
+    return {{
+      latlng,
+      icon: options.icon,
+      options,
+      addTo(targetMap) {{ targetMap.addLayer(this); return this; }},
+      setLatLng(nextLatLng) {{ this.latlng = nextLatLng; }},
+      setIcon(nextIcon) {{ this.icon = nextIcon; }},
+      getElement() {{
+        return {{
+          querySelector(selector) {{
+            return selector === '.gpx-player-direction-marker' ? arrow : null;
+          }}
+        }};
+      }},
+      arrow,
+    }};
+  }},
+  polyline(latlngs) {{
+    return {{
+      latlngs,
+      addTo(targetMap) {{ targetMap.addLayer(this); return this; }},
+      setLatLngs(nextLatLngs) {{ this.latlngs = nextLatLngs; }},
+    }};
+  }},
+  control() {{
+    return {{
+      addTo(targetMap) {{ this.container = this.onAdd(targetMap); return this; }},
+    }};
+  }},
+  DomUtil: {{ create(_tag, className) {{ const element = makeElement(_tag); element.className = className; return element; }} }},
+  DomEvent: {{
+    disableClickPropagation() {{}},
+    disableScrollPropagation() {{}},
+    on(element, type, handler) {{ element.addEventListener(type, handler); }},
+    stop() {{ throw new Error('L.DomEvent.stop should not be used for native select clicks'); }},
+  }},
+}};
+window.gpxPlayerPlayback = {{
+  map_test: {{
+    mapId: 'map_test',
+    colors: ['blue'],
+    points: [[
+      {{ lat: 1, lon: 1, time: '2024-06-15T12:00:00Z' }},
+      {{ lat: 2, lon: 1, time: '2024-06-15T12:01:00Z' }},
+      {{ lat: 2, lon: 2, time: '2024-06-15T12:01:00Z' }},
+      {{ lat: 2, lon: 3, time: '2024-06-15T12:02:00Z' }},
+    ]],
+    speeds: [[0, 1, 1, 1]],
+    distances: [[0, 1, 2, 3]],
+    avgSpeeds: [[0, 1, 1, 1]],
+    trackNames: ['Alpha'],
+    timestamps: [
+      '2024-06-15T12:00:00Z',
+      '2024-06-15T12:01:00Z',
+      '2024-06-15T12:01:00Z',
+      '2024-06-15T12:02:00Z',
+    ],
+    minTime: '2024-06-15T12:00:00Z',
+    maxTime: '2024-06-15T12:02:00Z',
+    timeRange: 120,
+    title: 'Test',
+    sliderId: 'slider',
+    timeLegendId: 'time',
+    playPauseButtonId: 'play',
+    boatLegendId: 'legend',
+    sliderActiveColor: '#111',
+    sliderInactiveColor: '#ddd',
+    tailPointCount: 2,
+    fullTrackLayerNames: [null],
+  }}
+}};
+{playback_js}
+const state = window.gpxPlayerPlayback.map_test;
+const slider = state.slider;
+
+slider.value = 500;
+slider.dispatchEvent(new Event('input'));
+assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
+
+slider.value = 750;
+slider.dispatchEvent(new Event('input'));
+assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(90deg)');
+"""
+    result = subprocess.run(
+        ["node", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_wheel_includes_playback_assets(tmp_path):
     project_root = Path(__file__).resolve().parents[1]
     dist_dir = tmp_path / "dist"
