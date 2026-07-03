@@ -28,9 +28,13 @@
         state.initialized = true;
         state.map = map;
         state.isPlaying = false;
-        state.playbackInterval = null;
+        state.playbackAnimationFrame = null;
+        state.lastFrameTimeMs = null;
+        state.playbackRate = 1;
         state.trackTimeValues = initializeTrackTimeValues(state);
+        initializePlaybackClock(state);
         state.currentPointIndexes = state.points.map(() => 0);
+        state.currentSegmentIndexes = state.points.map(() => 0);
         state.trackModes = state.points.map(() => "full");
         state.fullTrackLayers = initializeFullTrackLayers(state);
         state.trackHeadings = initializeTrackHeadings(state);
@@ -54,12 +58,8 @@
         visibilityControl.addTo(map);
 
         slider.addEventListener('input', () => {
-            updateSliderVisual(state);
-            updateCurrentPointIndexes(state);
-            updateTrackMarkers(state);
-            updateTailLayers(state);
-            updateTimeDisplay(state);
-            updateBoatLegend(state);
+            state.currentTimeMs = timeFromSlider(state);
+            refreshPlaybackForCurrentTime(state);
         });
 
         slider.dispatchEvent(new Event('input'));
@@ -399,28 +399,60 @@ ${sliderSelector}::-moz-range-thumb {
         return control;
     }
 
-    function sliderTimeIndex(state) {
-        const slider = state.slider;
-        if (!state.timestamps.length) {
-            return 0;
+    function initializePlaybackClock(state) {
+        const timestampValues = (state.timestamps || [])
+            .map((timestamp) => new Date(timestamp).getTime())
+            .filter((timestamp) => Number.isFinite(timestamp));
+        const payloadMinTime = new Date(state.minTime).getTime();
+        const payloadMaxTime = new Date(state.maxTime).getTime();
+        state.minTimeMs = Number.isFinite(payloadMinTime)
+            ? payloadMinTime
+            : Math.min(...timestampValues);
+        state.maxTimeMs = Number.isFinite(payloadMaxTime)
+            ? payloadMaxTime
+            : Math.max(...timestampValues);
+        if (!Number.isFinite(state.minTimeMs)) {
+            state.minTimeMs = 0;
         }
-        return Math.floor(slider.value / 1000 * (state.timestamps.length - 1));
+        if (!Number.isFinite(state.maxTimeMs) || state.maxTimeMs < state.minTimeMs) {
+            state.maxTimeMs = state.minTimeMs;
+        }
+        state.currentTimeMs = state.minTimeMs;
     }
 
-    function currentSliderTime(state) {
-        const timeIndex = sliderTimeIndex(state);
-        return new Date(state.timestamps[timeIndex]).getTime();
+    function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
     }
 
-    function pointIndexAtTime(times, currentTime) {
-        if (!times.length || currentTime < times[0]) {
+    function timeFromSlider(state) {
+        const slider = state.slider;
+        const minValue = parseInt(slider.min, 10) || 0;
+        const maxValue = parseInt(slider.max, 10) || 0;
+        const sliderValue = parseInt(slider.value, 10) || 0;
+        const sliderRange = Math.max(1, maxValue - minValue);
+        const ratio = clamp((sliderValue - minValue) / sliderRange, 0, 1);
+        return state.minTimeMs + ratio * (state.maxTimeMs - state.minTimeMs);
+    }
+
+    function setSliderToTime(state, timeMs) {
+        const slider = state.slider;
+        const minValue = parseInt(slider.min, 10) || 0;
+        const maxValue = parseInt(slider.max, 10) || 0;
+        const timeRange = state.maxTimeMs - state.minTimeMs;
+        const ratio = timeRange > 0 ? (timeMs - state.minTimeMs) / timeRange : 0;
+        slider.value = String(Math.round(minValue + clamp(ratio, 0, 1) * (maxValue - minValue)));
+        updateSliderVisual(state);
+    }
+
+    function findPointIndexAtTime(times, currentTimeMs) {
+        if (!times.length || currentTimeMs < times[0]) {
             return 0;
         }
         let low = 0;
         let high = times.length - 1;
         while (low <= high) {
             const mid = Math.floor((low + high) / 2);
-            if (times[mid] <= currentTime) {
+            if (times[mid] <= currentTimeMs) {
                 low = mid + 1;
             } else {
                 high = mid - 1;
@@ -429,10 +461,53 @@ ${sliderSelector}::-moz-range-thumb {
         return Math.max(0, high);
     }
 
-    function updateCurrentPointIndexes(state) {
-        const currentTime = currentSliderTime(state);
-        state.currentTime = currentTime;
-        state.currentPointIndexes = state.trackTimeValues.map((times) => pointIndexAtTime(times, currentTime));
+    function findSegmentIndexAtTime(times, currentTimeMs, previousIndex) {
+        if (times.length < 2) {
+            return 0;
+        }
+        const lastSegmentIndex = times.length - 2;
+        let index = clamp(previousIndex || 0, 0, lastSegmentIndex);
+        if (currentTimeMs >= times[index] && currentTimeMs <= times[index + 1]) {
+            return index;
+        }
+        if (currentTimeMs >= times[index + 1]) {
+            while (index < lastSegmentIndex && currentTimeMs > times[index + 1]) {
+                index += 1;
+            }
+            return index;
+        }
+        let low = 0;
+        let high = lastSegmentIndex;
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (currentTimeMs < times[mid]) {
+                high = mid - 1;
+            } else if (currentTimeMs > times[mid + 1]) {
+                low = mid + 1;
+            } else {
+                return mid;
+            }
+        }
+        return clamp(high, 0, lastSegmentIndex);
+    }
+
+    function refreshPlaybackForCurrentTime(state) {
+        state.currentTimeMs = clamp(state.currentTimeMs, state.minTimeMs, state.maxTimeMs);
+        state.currentPointIndexes = state.trackTimeValues.map((times) => (
+            findPointIndexAtTime(times, state.currentTimeMs)
+        ));
+        state.currentSegmentIndexes = state.trackTimeValues.map((times, trackIndex) => (
+            findSegmentIndexAtTime(times, state.currentTimeMs, state.currentSegmentIndexes[trackIndex])
+        ));
+        setSliderToTime(state, state.currentTimeMs);
+        renderPlaybackFrame(state);
+    }
+
+    function renderPlaybackFrame(state) {
+        updateTrackMarkers(state);
+        updateTailLayers(state);
+        updateTimeDisplay(state);
+        updateBoatLegend(state);
     }
 
     function updateTrackMarkers(state) {
@@ -519,8 +594,7 @@ ${sliderSelector}::-moz-range-thumb {
     }
 
     function updateTimeDisplay(state) {
-        const currentTime = state.currentTime || currentSliderTime(state);
-        state.timeDisplay.textContent = new Date(currentTime).toUTCString().replace('GMT', 'UTC');
+        state.timeDisplay.textContent = new Date(state.currentTimeMs).toUTCString().replace('GMT', 'UTC');
     }
 
     function updateBoatLegend(state) {
