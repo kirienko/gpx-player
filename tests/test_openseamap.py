@@ -753,6 +753,7 @@ assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
 state.trackModeControls[0].value = 'tail';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
 assert.strictEqual(tailLayer.setLatLngCalls, 2);
+assert.deepStrictEqual(tailLayer.latlngs, [[1, 1], [1.5, 1]]);
 slider.value = 1000;
 slider.dispatchEvent(new Event('input'));
 assert.strictEqual(tailLayer.setLatLngCalls, 3);

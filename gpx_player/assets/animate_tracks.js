@@ -646,10 +646,25 @@ ${sliderSelector}::-moz-range-thumb {
 
     function tailLatLngs(state, trackIndex) {
         const track = state.points[trackIndex];
+        const times = state.trackTimeValues[trackIndex];
         const pointIndex = state.currentPointIndexes[trackIndex] || 0;
+        const segmentIndex = state.currentSegmentIndexes[trackIndex] || 0;
         const tailPointCount = Math.max(1, parseInt(state.tailPointCount, 10) || 60);
         const startIndex = Math.max(0, pointIndex - tailPointCount + 1);
-        return track.slice(startIndex, pointIndex + 1).map((point) => [point.lat, point.lon]);
+        const latlngs = track.slice(startIndex, pointIndex + 1).map((point) => [point.lat, point.lon]);
+        const livePosition = trackPositionAtTime(
+            track,
+            times,
+            state.currentTimeMs,
+            segmentIndex,
+            state.trackHeadings[trackIndex] || 0
+        );
+        const liveLatLng = [livePosition.lat, livePosition.lon];
+        const lastLatLng = latlngs[latlngs.length - 1];
+        if (!lastLatLng || lastLatLng[0] !== liveLatLng[0] || lastLatLng[1] !== liveLatLng[1]) {
+            latlngs.push(liveLatLng);
+        }
+        return latlngs;
     }
 
     function updateTailLayers(state) {
