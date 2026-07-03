@@ -208,6 +208,8 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert "--gpx-slider-progress" in rendered
     assert "requestAnimationFrame" in rendered
     assert "playbackRate" in rendered
+    legacy_timer = "set" + "Interval"
+    assert legacy_timer not in rendered
     assert "outline: 2px solid #ffffff;" in rendered
     assert "outline-offset: 4px;" in rendered
     assert "box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);" in rendered
