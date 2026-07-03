@@ -206,6 +206,9 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert "L.control.layers" not in rendered
     assert "linear-gradient(" in rendered
     assert "--gpx-slider-progress" in rendered
+    assert "requestAnimationFrame" in rendered
+    assert "playbackRate" in rendered
+    assert "setInterval" not in rendered
     assert "outline: 2px solid #ffffff;" in rendered
     assert "outline-offset: 4px;" in rendered
     assert "box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45);" in rendered
@@ -469,6 +472,137 @@ assert.strictEqual(state.currentTimeMs, Date.parse('2024-06-15T12:00:45Z'));
 assert.deepStrictEqual(state.currentPointIndexes, [0]);
 assert.deepStrictEqual(state.currentSegmentIndexes, [0]);
 assert.strictEqual(state.slider.style['--gpx-slider-progress'], '25%');
+"""
+    result = subprocess.run(
+        ["node", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_playback_js_request_animation_frame_advances_elapsed_time_with_rate():
+    if not shutil.which("node"):
+        pytest.skip("node is required for playback JS behavior test")
+
+    asset_path = Path(__file__).resolve().parents[1] / "gpx_player" / "assets" / "animate_tracks.js"
+    playback_js = asset_path.read_text(encoding="utf-8")
+    script = f"""
+const assert = require('assert');
+const layers = new Set();
+const frameCallbacks = [];
+const cancelledFrames = [];
+const map = {{
+  addLayer(layer) {{ layers.add(layer); }},
+  removeLayer(layer) {{ layers.delete(layer); }},
+  hasLayer(layer) {{ return layers.has(layer); }}
+}};
+function makeElement(tag) {{
+  return {{
+    tagName: tag,
+    style: {{ setProperty(name, value) {{ this[name] = value; }} }},
+    children: [],
+    listeners: {{}},
+    appendChild(child) {{ this.children.push(child); return child; }},
+    setAttribute(name, value) {{ this[name] = value; }},
+    addEventListener(type, handler) {{ this.listeners[type] = handler; }},
+    dispatchEvent(event) {{ if (this.listeners[event.type]) this.listeners[event.type](event); }},
+  }};
+}}
+global.Event = function Event(type) {{ this.type = type; }};
+global.window = global;
+global.map_test = map;
+global.requestAnimationFrame = function requestAnimationFrame(callback) {{
+  frameCallbacks.push(callback);
+  return frameCallbacks.length;
+}};
+global.cancelAnimationFrame = function cancelAnimationFrame(frameId) {{
+  cancelledFrames.push(frameId);
+}};
+global.document = {{
+  readyState: 'complete',
+  body: makeElement('body'),
+  head: makeElement('head'),
+  createElement: makeElement,
+  createTextNode(text) {{ return {{ textContent: text }}; }},
+  getElementById() {{ return null; }},
+}};
+global.L = {{
+  divIcon(options) {{ return options; }},
+  marker(latlng, options) {{
+    const arrow = {{ style: {{}} }};
+    return {{
+      latlng,
+      icon: options.icon,
+      options,
+      addTo(targetMap) {{ targetMap.addLayer(this); return this; }},
+      setLatLng(nextLatLng) {{ this.latlng = nextLatLng; }},
+      setIcon(nextIcon) {{ this.icon = nextIcon; }},
+      getElement() {{ return {{ querySelector(selector) {{ return selector === '.gpx-player-direction-marker' ? arrow : null; }} }}; }},
+      arrow,
+    }};
+  }},
+  polyline(latlngs) {{
+    return {{
+      latlngs,
+      addTo(targetMap) {{ targetMap.addLayer(this); return this; }},
+      setLatLngs(nextLatLngs) {{ this.latlngs = nextLatLngs; }},
+    }};
+  }},
+  control() {{
+    return {{ addTo(targetMap) {{ this.container = this.onAdd(targetMap); return this; }} }};
+  }},
+  DomUtil: {{ create(_tag, className) {{ const element = makeElement(_tag); element.className = className; return element; }} }},
+  DomEvent: {{
+    disableClickPropagation() {{}},
+    disableScrollPropagation() {{}},
+    on(element, type, handler) {{ element.addEventListener(type, handler); }},
+  }},
+}};
+window.gpxPlayerPlayback = {{
+  map_test: {{
+    mapId: 'map_test',
+    colors: ['red'],
+    points: [[
+      {{ lat: 1, lon: 1, time: '2024-06-15T12:00:00Z' }},
+      {{ lat: 2, lon: 1, time: '2024-06-15T12:01:00Z' }},
+    ]],
+    speeds: [[0, 1]],
+    distances: [[0, 1]],
+    avgSpeeds: [[0, 1]],
+    trackNames: ['Alpha'],
+    timestamps: ['2024-06-15T12:00:00Z', '2024-06-15T12:01:00Z'],
+    minTime: '2024-06-15T12:00:00Z',
+    maxTime: '2024-06-15T12:01:00Z',
+    timeRange: 60,
+    title: 'Test',
+    sliderId: 'slider',
+    timeLegendId: 'time',
+    playPauseButtonId: 'play',
+    boatLegendId: 'legend',
+    sliderActiveColor: '#111',
+    sliderInactiveColor: '#ddd',
+    tailPointCount: 2,
+    fullTrackLayerNames: [null],
+  }}
+}};
+{playback_js}
+const state = window.gpxPlayerPlayback.map_test;
+state.playbackRate = 2;
+state.playPauseButton.dispatchEvent(new Event('click'));
+assert.strictEqual(state.isPlaying, true);
+assert.strictEqual(frameCallbacks.length, 1);
+frameCallbacks.shift()(1000);
+assert.strictEqual(state.currentTimeMs, Date.parse('2024-06-15T12:00:00Z'));
+frameCallbacks.shift()(2000);
+assert.strictEqual(state.currentTimeMs, Date.parse('2024-06-15T12:00:02Z'));
+assert.strictEqual(state.slider.value, '33');
+assert.deepStrictEqual(state.trackMarkers[0].latlng, [1 + 2 / 60, 1]);
+state.playPauseButton.dispatchEvent(new Event('click'));
+assert.strictEqual(state.isPlaying, false);
+assert.ok(cancelledFrames.length >= 1);
 """
     result = subprocess.run(
         ["node", "-e", script],

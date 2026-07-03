@@ -754,30 +754,63 @@ ${sliderSelector}::-moz-range-thumb {
         control.value = state.trackModes[trackIndex];
     }
 
-    function updateSlider(state) {
-        const slider = state.slider;
-        if (parseInt(slider.value, 10) < parseInt(slider.max, 10)) {
-            slider.value = parseInt(slider.value, 10) + 1;
-            slider.dispatchEvent(new Event('input'));
-        } else {
-            clearInterval(state.playbackInterval);
-            state.isPlaying = false;
-            resetPlayPauseButton(state);
+    function startPlayback(state) {
+        if (state.isPlaying) {
+            return;
         }
+        state.isPlaying = true;
+        state.lastFrameTimeMs = null;
+        state.playbackAnimationFrame = window.requestAnimationFrame((frameTimeMs) => (
+            playbackFrame(state, frameTimeMs)
+        ));
+    }
+
+    function stopPlayback(state) {
+        if (state.playbackAnimationFrame !== null) {
+            window.cancelAnimationFrame(state.playbackAnimationFrame);
+            state.playbackAnimationFrame = null;
+        }
+        state.lastFrameTimeMs = null;
+        state.isPlaying = false;
+        resetPlayPauseButton(state);
+    }
+
+    function playbackFrame(state, frameTimeMs) {
+        if (!state.isPlaying) {
+            return;
+        }
+        if (state.lastFrameTimeMs === null) {
+            state.lastFrameTimeMs = frameTimeMs;
+        } else {
+            const frameDeltaMs = Math.max(0, frameTimeMs - state.lastFrameTimeMs);
+            state.lastFrameTimeMs = frameTimeMs;
+            state.currentTimeMs = clamp(
+                state.currentTimeMs + frameDeltaMs * state.playbackRate,
+                state.minTimeMs,
+                state.maxTimeMs
+            );
+            refreshPlaybackForCurrentTime(state);
+        }
+
+        if (state.currentTimeMs >= state.maxTimeMs) {
+            stopPlayback(state);
+            return;
+        }
+
+        state.playbackAnimationFrame = window.requestAnimationFrame((nextFrameTimeMs) => (
+            playbackFrame(state, nextFrameTimeMs)
+        ));
     }
 
     function togglePlayPause(state, playPauseButton) {
         if (state.isPlaying) {
-            clearInterval(state.playbackInterval);
-            resetPlayPauseButton(state);
-            state.isPlaying = false;
+            stopPlayback(state);
         } else {
-            state.playbackInterval = setInterval(() => updateSlider(state), 100);
+            startPlayback(state);
             playPauseButton.style.backgroundColor = 'gray';
             playPauseButton.textContent = '⏸️';
             playPauseButton.setAttribute('aria-label', 'Pause GPX animation');
             playPauseButton.title = 'Pause GPX animation';
-            state.isPlaying = true;
         }
     }
 
