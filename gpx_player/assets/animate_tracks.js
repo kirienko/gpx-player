@@ -221,7 +221,42 @@ ${sliderSelector}::-moz-range-thumb {
     }
 
     function initializeTrackTimeValues(state) {
-        return state.points.map((track) => track.map((point) => new Date(point.time).getTime()));
+        return state.points.map((track) => normalizeTrackTimeValues(track));
+    }
+
+    function normalizeTrackTimeValues(track) {
+        if (!track.length) {
+            return [];
+        }
+        const normalized = track.map((point) => new Date(point.time).getTime());
+        let lastValidTime = null;
+        let firstValidTime = null;
+
+        for (let i = 0; i < normalized.length; i++) {
+            if (Number.isFinite(normalized[i])) {
+                if (firstValidTime === null) {
+                    firstValidTime = normalized[i];
+                }
+                lastValidTime = normalized[i];
+            } else if (lastValidTime !== null) {
+                normalized[i] = lastValidTime;
+            }
+        }
+
+        if (firstValidTime === null) {
+            return normalized.map(() => 0);
+        }
+
+        for (let i = 0; i < normalized.length; i++) {
+            if (!Number.isFinite(normalized[i])) {
+                normalized[i] = firstValidTime;
+            }
+            if (i > 0 && normalized[i] < normalized[i - 1]) {
+                normalized[i] = normalized[i - 1];
+            }
+        }
+
+        return normalized;
     }
 
     function initializeFullTrackLayers(state) {
@@ -461,34 +496,39 @@ ${sliderSelector}::-moz-range-thumb {
         return Math.max(0, high);
     }
 
-    function findSegmentIndexAtTime(times, currentTimeMs, previousIndex) {
+    function findSegmentIndexAtTime(times, currentTimeMs) {
         if (times.length < 2) {
             return 0;
         }
         const lastSegmentIndex = times.length - 2;
-        let index = clamp(previousIndex || 0, 0, lastSegmentIndex);
-        if (currentTimeMs >= times[index] && currentTimeMs <= times[index + 1]) {
-            return index;
-        }
-        if (currentTimeMs >= times[index + 1]) {
-            while (index < lastSegmentIndex && currentTimeMs > times[index + 1]) {
-                index += 1;
+        const time = Number.isFinite(currentTimeMs) ? currentTimeMs : times[0];
+        const candidate = clamp(findPointIndexAtTime(times, time), 0, lastSegmentIndex);
+
+        for (let i = candidate; i >= 0; i--) {
+            if (!isUsableTimeSegment(times, i)) {
+                continue;
             }
-            return index;
-        }
-        let low = 0;
-        let high = lastSegmentIndex;
-        while (low <= high) {
-            const mid = Math.floor((low + high) / 2);
-            if (currentTimeMs < times[mid]) {
-                high = mid - 1;
-            } else if (currentTimeMs > times[mid + 1]) {
-                low = mid + 1;
-            } else {
-                return mid;
+            if (times[i] <= time && time <= times[i + 1]) {
+                return i;
             }
         }
-        return clamp(high, 0, lastSegmentIndex);
+
+        for (let i = candidate + 1; i <= lastSegmentIndex; i++) {
+            if (!isUsableTimeSegment(times, i)) {
+                continue;
+            }
+            if (times[i] <= time && time <= times[i + 1]) {
+                return i;
+            }
+        }
+
+        for (let i = 0; i <= lastSegmentIndex; i++) {
+            if (isUsableTimeSegment(times, i)) {
+                return i;
+            }
+        }
+
+        return 0;
     }
 
     function refreshPlaybackForCurrentTime(state) {
@@ -497,7 +537,7 @@ ${sliderSelector}::-moz-range-thumb {
             findPointIndexAtTime(times, state.currentTimeMs)
         ));
         state.currentSegmentIndexes = state.trackTimeValues.map((times, trackIndex) => (
-            findSegmentIndexAtTime(times, state.currentTimeMs, state.currentSegmentIndexes[trackIndex])
+            findSegmentIndexAtTime(times, state.currentTimeMs)
         ));
         setSliderToTime(state, state.currentTimeMs);
         renderPlaybackFrame(state);
@@ -636,6 +676,12 @@ ${sliderSelector}::-moz-range-thumb {
         if (!times || segmentIndex < 0 || segmentIndex + 1 >= times.length) {
             return true;
         }
+        return Number.isFinite(times[segmentIndex])
+            && Number.isFinite(times[segmentIndex + 1])
+            && times[segmentIndex + 1] > times[segmentIndex];
+    }
+
+    function isUsableTimeSegment(times, segmentIndex) {
         return Number.isFinite(times[segmentIndex])
             && Number.isFinite(times[segmentIndex + 1])
             && times[segmentIndex + 1] > times[segmentIndex];
