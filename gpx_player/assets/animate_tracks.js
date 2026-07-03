@@ -28,9 +28,13 @@
         state.initialized = true;
         state.map = map;
         state.isPlaying = false;
-        state.playbackInterval = null;
+        state.playbackAnimationFrame = null;
+        state.lastFrameTimeMs = null;
+        state.playbackRate = 10;
         state.trackTimeValues = initializeTrackTimeValues(state);
+        initializePlaybackClock(state);
         state.currentPointIndexes = state.points.map(() => 0);
+        state.currentSegmentIndexes = state.points.map(() => 0);
         state.trackModes = state.points.map(() => "full");
         state.fullTrackLayers = initializeFullTrackLayers(state);
         state.trackHeadings = initializeTrackHeadings(state);
@@ -54,12 +58,8 @@
         visibilityControl.addTo(map);
 
         slider.addEventListener('input', () => {
-            updateSliderVisual(state);
-            updateCurrentPointIndexes(state);
-            updateTrackMarkers(state);
-            updateTailLayers(state);
-            updateTimeDisplay(state);
-            updateBoatLegend(state);
+            state.currentTimeMs = timeFromSlider(state);
+            refreshPlaybackForCurrentTime(state);
         });
 
         slider.dispatchEvent(new Event('input'));
@@ -221,7 +221,42 @@ ${sliderSelector}::-moz-range-thumb {
     }
 
     function initializeTrackTimeValues(state) {
-        return state.points.map((track) => track.map((point) => new Date(point.time).getTime()));
+        return state.points.map((track) => normalizeTrackTimeValues(track));
+    }
+
+    function normalizeTrackTimeValues(track) {
+        if (!track.length) {
+            return [];
+        }
+        const normalized = track.map((point) => new Date(point.time).getTime());
+        let lastValidTime = null;
+        let firstValidTime = null;
+
+        for (let i = 0; i < normalized.length; i++) {
+            if (Number.isFinite(normalized[i])) {
+                if (firstValidTime === null) {
+                    firstValidTime = normalized[i];
+                }
+                lastValidTime = normalized[i];
+            } else if (lastValidTime !== null) {
+                normalized[i] = lastValidTime;
+            }
+        }
+
+        if (firstValidTime === null) {
+            return normalized.map(() => 0);
+        }
+
+        for (let i = 0; i < normalized.length; i++) {
+            if (!Number.isFinite(normalized[i])) {
+                normalized[i] = firstValidTime;
+            }
+            if (i > 0 && normalized[i] < normalized[i - 1]) {
+                normalized[i] = normalized[i - 1];
+            }
+        }
+
+        return normalized;
     }
 
     function initializeFullTrackLayers(state) {
@@ -399,28 +434,60 @@ ${sliderSelector}::-moz-range-thumb {
         return control;
     }
 
-    function sliderTimeIndex(state) {
-        const slider = state.slider;
-        if (!state.timestamps.length) {
-            return 0;
+    function initializePlaybackClock(state) {
+        const timestampValues = (state.timestamps || [])
+            .map((timestamp) => new Date(timestamp).getTime())
+            .filter((timestamp) => Number.isFinite(timestamp));
+        const payloadMinTime = new Date(state.minTime).getTime();
+        const payloadMaxTime = new Date(state.maxTime).getTime();
+        state.minTimeMs = Number.isFinite(payloadMinTime)
+            ? payloadMinTime
+            : Math.min(...timestampValues);
+        state.maxTimeMs = Number.isFinite(payloadMaxTime)
+            ? payloadMaxTime
+            : Math.max(...timestampValues);
+        if (!Number.isFinite(state.minTimeMs)) {
+            state.minTimeMs = 0;
         }
-        return Math.floor(slider.value / 1000 * (state.timestamps.length - 1));
+        if (!Number.isFinite(state.maxTimeMs) || state.maxTimeMs < state.minTimeMs) {
+            state.maxTimeMs = state.minTimeMs;
+        }
+        state.currentTimeMs = state.minTimeMs;
     }
 
-    function currentSliderTime(state) {
-        const timeIndex = sliderTimeIndex(state);
-        return new Date(state.timestamps[timeIndex]).getTime();
+    function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
     }
 
-    function pointIndexAtTime(times, currentTime) {
-        if (!times.length || currentTime < times[0]) {
+    function timeFromSlider(state) {
+        const slider = state.slider;
+        const minValue = parseInt(slider.min, 10) || 0;
+        const maxValue = parseInt(slider.max, 10) || 0;
+        const sliderValue = parseInt(slider.value, 10) || 0;
+        const sliderRange = Math.max(1, maxValue - minValue);
+        const ratio = clamp((sliderValue - minValue) / sliderRange, 0, 1);
+        return state.minTimeMs + ratio * (state.maxTimeMs - state.minTimeMs);
+    }
+
+    function setSliderToTime(state, timeMs) {
+        const slider = state.slider;
+        const minValue = parseInt(slider.min, 10) || 0;
+        const maxValue = parseInt(slider.max, 10) || 0;
+        const timeRange = state.maxTimeMs - state.minTimeMs;
+        const ratio = timeRange > 0 ? (timeMs - state.minTimeMs) / timeRange : 0;
+        slider.value = String(Math.round(minValue + clamp(ratio, 0, 1) * (maxValue - minValue)));
+        updateSliderVisual(state);
+    }
+
+    function findPointIndexAtTime(times, currentTimeMs) {
+        if (!times.length || currentTimeMs < times[0]) {
             return 0;
         }
         let low = 0;
         let high = times.length - 1;
         while (low <= high) {
             const mid = Math.floor((low + high) / 2);
-            if (times[mid] <= currentTime) {
+            if (times[mid] <= currentTimeMs) {
                 low = mid + 1;
             } else {
                 high = mid - 1;
@@ -429,30 +496,150 @@ ${sliderSelector}::-moz-range-thumb {
         return Math.max(0, high);
     }
 
-    function updateCurrentPointIndexes(state) {
-        const currentTime = currentSliderTime(state);
-        state.currentTime = currentTime;
-        state.currentPointIndexes = state.trackTimeValues.map((times) => pointIndexAtTime(times, currentTime));
+    function findSegmentIndexAtTime(times, currentTimeMs) {
+        if (times.length < 2) {
+            return 0;
+        }
+        const lastSegmentIndex = times.length - 2;
+        const time = Number.isFinite(currentTimeMs) ? currentTimeMs : times[0];
+        const candidate = clamp(findPointIndexAtTime(times, time), 0, lastSegmentIndex);
+
+        for (let i = candidate; i >= 0; i--) {
+            if (!isUsableTimeSegment(times, i)) {
+                continue;
+            }
+            if (times[i] <= time && time <= times[i + 1]) {
+                return i;
+            }
+        }
+
+        for (let i = candidate + 1; i <= lastSegmentIndex; i++) {
+            if (!isUsableTimeSegment(times, i)) {
+                continue;
+            }
+            if (times[i] <= time && time <= times[i + 1]) {
+                return i;
+            }
+        }
+
+        for (let i = 0; i <= lastSegmentIndex; i++) {
+            if (isUsableTimeSegment(times, i)) {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    function refreshPlaybackForCurrentTime(state) {
+        state.currentTimeMs = clamp(state.currentTimeMs, state.minTimeMs, state.maxTimeMs);
+        state.currentPointIndexes = state.trackTimeValues.map((times) => (
+            findPointIndexAtTime(times, state.currentTimeMs)
+        ));
+        state.currentSegmentIndexes = state.trackTimeValues.map((times, trackIndex) => (
+            findSegmentIndexAtTime(times, state.currentTimeMs)
+        ));
+        setSliderToTime(state, state.currentTimeMs);
+        renderPlaybackFrame(state);
+    }
+
+    function renderPlaybackFrame(state) {
+        updateTrackMarkers(state);
+        updateTailLayers(state);
+        updateTimeDisplay(state);
+        updateBoatLegend(state);
     }
 
     function updateTrackMarkers(state) {
         const map = state.map;
         state.trackMarkers.forEach((marker, trackIndex) => {
             const track = state.points[trackIndex];
-            const pointIndex = state.currentPointIndexes[trackIndex] || 0;
-            const closestPoint = track[pointIndex] || track[0];
-            const heading = trackHeadingAtIndex(track, pointIndex, state.trackHeadings[trackIndex] || 0);
-            state.trackHeadings[trackIndex] = heading;
-            marker.setLatLng([closestPoint.lat, closestPoint.lon]);
-            updateTrackMarkerHeading(marker, heading);
+            const times = state.trackTimeValues[trackIndex];
+            const segmentIndex = state.currentSegmentIndexes[trackIndex] || 0;
+            const position = trackPositionAtTime(
+                track,
+                times,
+                state.currentTimeMs,
+                segmentIndex,
+                state.trackHeadings[trackIndex] || 0
+            );
+            state.trackHeadings[trackIndex] = position.heading;
+            marker.setLatLng([position.lat, position.lon]);
+            updateTrackMarkerHeading(marker, position.heading);
             if (state.trackModes[trackIndex] === 'off') {
                 if (map.hasLayer(marker)) {
                     map.removeLayer(marker);
                 }
-            } else if (!map.hasLayer(marker)) {
+                return;
+            }
+            if (!map.hasLayer(marker)) {
                 marker.addTo(map);
             }
         });
+    }
+
+    function trackPositionAtTime(track, times, currentTimeMs, segmentIndex, fallbackHeading) {
+        if (!track.length) {
+            return {lat: 0, lon: 0, heading: fallbackHeading || 0};
+        }
+        if (track.length === 1 || times.length < 2 || currentTimeMs < times[0]) {
+            const firstPoint = track[0];
+            return {
+                lat: firstPoint.lat,
+                lon: firstPoint.lon,
+                heading: movementHeadingForSegment(track, times, 0, fallbackHeading || 0),
+            };
+        }
+        const lastPoint = track[track.length - 1];
+        if (currentTimeMs >= times[times.length - 1]) {
+            return {
+                lat: lastPoint.lat,
+                lon: lastPoint.lon,
+                heading: movementHeadingForSegment(track, times, track.length - 2, fallbackHeading || 0),
+            };
+        }
+
+        const startIndex = clamp(segmentIndex, 0, track.length - 2);
+        const endIndex = startIndex + 1;
+        const startTime = times[startIndex];
+        const endTime = times[endIndex];
+        const startPoint = track[startIndex];
+        const endPoint = track[endIndex];
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+            return {
+                lat: startPoint.lat,
+                lon: startPoint.lon,
+                heading: movementHeadingForSegment(track, times, startIndex, fallbackHeading || 0),
+            };
+        }
+
+        const ratio = clamp((currentTimeMs - startTime) / (endTime - startTime), 0, 1);
+        return {
+            lat: startPoint.lat + (endPoint.lat - startPoint.lat) * ratio,
+            lon: startPoint.lon + (endPoint.lon - startPoint.lon) * ratio,
+            heading: movementHeadingForSegment(track, times, startIndex, fallbackHeading || 0),
+        };
+    }
+
+    function movementHeadingForSegment(track, times, segmentIndex, fallbackHeading) {
+        if (!track.length) {
+            return fallbackHeading || 0;
+        }
+        const startIndex = clamp(segmentIndex, 0, Math.max(0, track.length - 1));
+        if (isUsableHeadingSegment(track, times, startIndex)) {
+            return headingBetween(track[startIndex], track[startIndex + 1]);
+        }
+        for (let i = startIndex; i > 0; i--) {
+            if (isUsableHeadingSegment(track, times, i - 1)) {
+                return headingBetween(track[i - 1], track[i]);
+            }
+        }
+        for (let i = startIndex + 1; i < track.length - 1; i++) {
+            if (isUsableHeadingSegment(track, times, i)) {
+                return headingBetween(track[i], track[i + 1]);
+            }
+        }
+        return fallbackHeading || 0;
     }
 
     function trackHeadingAtIndex(track, pointIndex, fallbackHeading) {
@@ -480,6 +667,26 @@ ${sliderSelector}::-moz-range-thumb {
         return fromPoint.lat !== toPoint.lat || fromPoint.lon !== toPoint.lon;
     }
 
+    function isUsableHeadingSegment(track, times, segmentIndex) {
+        const fromPoint = track[segmentIndex];
+        const toPoint = track[segmentIndex + 1];
+        if (!hasMovement(fromPoint, toPoint)) {
+            return false;
+        }
+        if (!times || segmentIndex < 0 || segmentIndex + 1 >= times.length) {
+            return true;
+        }
+        return Number.isFinite(times[segmentIndex])
+            && Number.isFinite(times[segmentIndex + 1])
+            && times[segmentIndex + 1] > times[segmentIndex];
+    }
+
+    function isUsableTimeSegment(times, segmentIndex) {
+        return Number.isFinite(times[segmentIndex])
+            && Number.isFinite(times[segmentIndex + 1])
+            && times[segmentIndex + 1] > times[segmentIndex];
+    }
+
     function headingBetween(fromPoint, toPoint) {
         const dx = toPoint.lon - fromPoint.lon;
         const dy = toPoint.lat - fromPoint.lat;
@@ -499,10 +706,25 @@ ${sliderSelector}::-moz-range-thumb {
 
     function tailLatLngs(state, trackIndex) {
         const track = state.points[trackIndex];
+        const times = state.trackTimeValues[trackIndex];
         const pointIndex = state.currentPointIndexes[trackIndex] || 0;
+        const segmentIndex = state.currentSegmentIndexes[trackIndex] || 0;
         const tailPointCount = Math.max(1, parseInt(state.tailPointCount, 10) || 60);
         const startIndex = Math.max(0, pointIndex - tailPointCount + 1);
-        return track.slice(startIndex, pointIndex + 1).map((point) => [point.lat, point.lon]);
+        const latlngs = track.slice(startIndex, pointIndex + 1).map((point) => [point.lat, point.lon]);
+        const livePosition = trackPositionAtTime(
+            track,
+            times,
+            state.currentTimeMs,
+            segmentIndex,
+            state.trackHeadings[trackIndex] || 0
+        );
+        const liveLatLng = [livePosition.lat, livePosition.lon];
+        const lastLatLng = latlngs[latlngs.length - 1];
+        if (!lastLatLng || lastLatLng[0] !== liveLatLng[0] || lastLatLng[1] !== liveLatLng[1]) {
+            latlngs.push(liveLatLng);
+        }
+        return latlngs;
     }
 
     function updateTailLayers(state) {
@@ -519,8 +741,7 @@ ${sliderSelector}::-moz-range-thumb {
     }
 
     function updateTimeDisplay(state) {
-        const currentTime = state.currentTime || currentSliderTime(state);
-        state.timeDisplay.textContent = new Date(currentTime).toUTCString().replace('GMT', 'UTC');
+        state.timeDisplay.textContent = new Date(state.currentTimeMs).toUTCString().replace('GMT', 'UTC');
     }
 
     function updateBoatLegend(state) {
@@ -608,30 +829,67 @@ ${sliderSelector}::-moz-range-thumb {
         control.value = state.trackModes[trackIndex];
     }
 
-    function updateSlider(state) {
-        const slider = state.slider;
-        if (parseInt(slider.value, 10) < parseInt(slider.max, 10)) {
-            slider.value = parseInt(slider.value, 10) + 1;
-            slider.dispatchEvent(new Event('input'));
-        } else {
-            clearInterval(state.playbackInterval);
-            state.isPlaying = false;
-            resetPlayPauseButton(state);
+    function startPlayback(state) {
+        if (state.isPlaying) {
+            return;
         }
+        if (state.currentTimeMs >= state.maxTimeMs) {
+            state.currentTimeMs = state.minTimeMs;
+            refreshPlaybackForCurrentTime(state);
+        }
+        state.isPlaying = true;
+        state.lastFrameTimeMs = null;
+        state.playbackAnimationFrame = window.requestAnimationFrame((frameTimeMs) => (
+            playbackFrame(state, frameTimeMs)
+        ));
+    }
+
+    function stopPlayback(state) {
+        if (state.playbackAnimationFrame !== null) {
+            window.cancelAnimationFrame(state.playbackAnimationFrame);
+            state.playbackAnimationFrame = null;
+        }
+        state.lastFrameTimeMs = null;
+        state.isPlaying = false;
+        resetPlayPauseButton(state);
+    }
+
+    function playbackFrame(state, frameTimeMs) {
+        if (!state.isPlaying) {
+            return;
+        }
+        if (state.lastFrameTimeMs === null) {
+            state.lastFrameTimeMs = frameTimeMs;
+        } else {
+            const frameDeltaMs = Math.max(0, frameTimeMs - state.lastFrameTimeMs);
+            state.lastFrameTimeMs = frameTimeMs;
+            state.currentTimeMs = clamp(
+                state.currentTimeMs + frameDeltaMs * state.playbackRate,
+                state.minTimeMs,
+                state.maxTimeMs
+            );
+            refreshPlaybackForCurrentTime(state);
+        }
+
+        if (state.currentTimeMs >= state.maxTimeMs) {
+            stopPlayback(state);
+            return;
+        }
+
+        state.playbackAnimationFrame = window.requestAnimationFrame((nextFrameTimeMs) => (
+            playbackFrame(state, nextFrameTimeMs)
+        ));
     }
 
     function togglePlayPause(state, playPauseButton) {
         if (state.isPlaying) {
-            clearInterval(state.playbackInterval);
-            resetPlayPauseButton(state);
-            state.isPlaying = false;
+            stopPlayback(state);
         } else {
-            state.playbackInterval = setInterval(() => updateSlider(state), 100);
+            startPlayback(state);
             playPauseButton.style.backgroundColor = 'gray';
             playPauseButton.textContent = '⏸️';
             playPauseButton.setAttribute('aria-label', 'Pause GPX animation');
             playPauseButton.title = 'Pause GPX animation';
-            state.isPlaying = true;
         }
     }
 
