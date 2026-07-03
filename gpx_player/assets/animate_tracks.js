@@ -513,13 +513,6 @@ ${sliderSelector}::-moz-range-thumb {
     function updateTrackMarkers(state) {
         const map = state.map;
         state.trackMarkers.forEach((marker, trackIndex) => {
-            if (state.trackModes[trackIndex] === 'off') {
-                if (map.hasLayer(marker)) {
-                    map.removeLayer(marker);
-                }
-                return;
-            }
-
             const track = state.points[trackIndex];
             const times = state.trackTimeValues[trackIndex];
             const segmentIndex = state.currentSegmentIndexes[trackIndex] || 0;
@@ -533,6 +526,12 @@ ${sliderSelector}::-moz-range-thumb {
             state.trackHeadings[trackIndex] = position.heading;
             marker.setLatLng([position.lat, position.lon]);
             updateTrackMarkerHeading(marker, position.heading);
+            if (state.trackModes[trackIndex] === 'off') {
+                if (map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                }
+                return;
+            }
             if (!map.hasLayer(marker)) {
                 marker.addTo(map);
             }

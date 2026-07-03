@@ -631,6 +631,11 @@ slider.value = 0;
 slider.dispatchEvent(new Event('input'));
 assert.strictEqual(tailLayer.setLatLngCalls, 4);
 assert.strictEqual(map.hasLayer(state.trackMarkers[0]), false);
+state.trackModeControls[0].value = 'full';
+state.trackModeControls[0].dispatchEvent(new Event('change'));
+assert.strictEqual(map.hasLayer(state.trackMarkers[0]), true);
+assert.deepStrictEqual(state.trackMarkers[0].latlng, [1, 1]);
+assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
 """
     result = subprocess.run(
         ["node", "-e", script],
