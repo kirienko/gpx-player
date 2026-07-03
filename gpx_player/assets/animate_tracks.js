@@ -582,7 +582,7 @@ ${sliderSelector}::-moz-range-thumb {
         if (!track.length) {
             return {lat: 0, lon: 0, heading: fallbackHeading || 0};
         }
-        if (track.length === 1 || times.length < 2 || currentTimeMs <= times[0]) {
+        if (track.length === 1 || times.length < 2 || currentTimeMs < times[0]) {
             const firstPoint = track[0];
             return {
                 lat: firstPoint.lat,
@@ -832,6 +832,10 @@ ${sliderSelector}::-moz-range-thumb {
     function startPlayback(state) {
         if (state.isPlaying) {
             return;
+        }
+        if (state.currentTimeMs >= state.maxTimeMs) {
+            state.currentTimeMs = state.minTimeMs;
+            refreshPlaybackForCurrentTime(state);
         }
         state.isPlaying = true;
         state.lastFrameTimeMs = null;
