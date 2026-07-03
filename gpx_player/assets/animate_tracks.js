@@ -513,21 +513,94 @@ ${sliderSelector}::-moz-range-thumb {
     function updateTrackMarkers(state) {
         const map = state.map;
         state.trackMarkers.forEach((marker, trackIndex) => {
-            const track = state.points[trackIndex];
-            const pointIndex = state.currentPointIndexes[trackIndex] || 0;
-            const closestPoint = track[pointIndex] || track[0];
-            const heading = trackHeadingAtIndex(track, pointIndex, state.trackHeadings[trackIndex] || 0);
-            state.trackHeadings[trackIndex] = heading;
-            marker.setLatLng([closestPoint.lat, closestPoint.lon]);
-            updateTrackMarkerHeading(marker, heading);
             if (state.trackModes[trackIndex] === 'off') {
                 if (map.hasLayer(marker)) {
                     map.removeLayer(marker);
                 }
-            } else if (!map.hasLayer(marker)) {
+                return;
+            }
+
+            const track = state.points[trackIndex];
+            const times = state.trackTimeValues[trackIndex];
+            const segmentIndex = state.currentSegmentIndexes[trackIndex] || 0;
+            const position = trackPositionAtTime(
+                track,
+                times,
+                state.currentTimeMs,
+                segmentIndex,
+                state.trackHeadings[trackIndex] || 0
+            );
+            state.trackHeadings[trackIndex] = position.heading;
+            marker.setLatLng([position.lat, position.lon]);
+            updateTrackMarkerHeading(marker, position.heading);
+            if (!map.hasLayer(marker)) {
                 marker.addTo(map);
             }
         });
+    }
+
+    function trackPositionAtTime(track, times, currentTimeMs, segmentIndex, fallbackHeading) {
+        if (!track.length) {
+            return {lat: 0, lon: 0, heading: fallbackHeading || 0};
+        }
+        if (track.length === 1 || times.length < 2 || currentTimeMs <= times[0]) {
+            const firstPoint = track[0];
+            return {
+                lat: firstPoint.lat,
+                lon: firstPoint.lon,
+                heading: movementHeadingForSegment(track, 0, fallbackHeading || 0),
+            };
+        }
+        const lastPoint = track[track.length - 1];
+        if (currentTimeMs >= times[times.length - 1]) {
+            return {
+                lat: lastPoint.lat,
+                lon: lastPoint.lon,
+                heading: movementHeadingForSegment(track, track.length - 2, fallbackHeading || 0),
+            };
+        }
+
+        const startIndex = clamp(segmentIndex, 0, track.length - 2);
+        const endIndex = startIndex + 1;
+        const startTime = times[startIndex];
+        const endTime = times[endIndex];
+        const startPoint = track[startIndex];
+        const endPoint = track[endIndex];
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+            return {
+                lat: startPoint.lat,
+                lon: startPoint.lon,
+                heading: movementHeadingForSegment(track, startIndex, fallbackHeading || 0),
+            };
+        }
+
+        const ratio = clamp((currentTimeMs - startTime) / (endTime - startTime), 0, 1);
+        return {
+            lat: startPoint.lat + (endPoint.lat - startPoint.lat) * ratio,
+            lon: startPoint.lon + (endPoint.lon - startPoint.lon) * ratio,
+            heading: movementHeadingForSegment(track, startIndex, fallbackHeading || 0),
+        };
+    }
+
+    function movementHeadingForSegment(track, segmentIndex, fallbackHeading) {
+        if (!track.length) {
+            return fallbackHeading || 0;
+        }
+        const startIndex = clamp(segmentIndex, 0, Math.max(0, track.length - 1));
+        if (startIndex < track.length - 1 && hasMovement(track[startIndex], track[startIndex + 1])) {
+            return headingBetween(track[startIndex], track[startIndex + 1]);
+        }
+        for (let i = startIndex; i > 0; i--) {
+            if (hasMovement(track[i - 1], track[i])) {
+                return headingBetween(track[i - 1], track[i]);
+            }
+        }
+        for (let i = startIndex + 1; i < track.length - 1; i++) {
+            if (hasMovement(track[i], track[i + 1])) {
+                return headingBetween(track[i], track[i + 1]);
+            }
+        }
+        return fallbackHeading || 0;
     }
 
     function trackHeadingAtIndex(track, pointIndex, fallbackHeading) {
