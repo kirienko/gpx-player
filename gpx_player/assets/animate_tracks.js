@@ -30,7 +30,7 @@
         state.isPlaying = false;
         state.playbackAnimationFrame = null;
         state.lastFrameTimeMs = null;
-        state.playbackRate = 1;
+        state.playbackRate = 10;
         state.trackTimeValues = initializeTrackTimeValues(state);
         initializePlaybackClock(state);
         state.currentPointIndexes = state.points.map(() => 0);

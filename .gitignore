@@ -3,6 +3,7 @@ run.json
 .aider*
 .env
 .superpowers/
+docs/
 __pycache__/
 *.py[cod]
 .pytest_cache/

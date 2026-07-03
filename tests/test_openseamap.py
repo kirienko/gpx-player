@@ -460,7 +460,7 @@ const slider = state.slider;
 assert.strictEqual(state.minTimeMs, Date.parse('2024-06-15T12:00:00Z'));
 assert.strictEqual(state.maxTimeMs, Date.parse('2024-06-15T12:03:00Z'));
 assert.strictEqual(state.currentTimeMs, state.minTimeMs);
-assert.strictEqual(state.playbackRate, 1);
+assert.strictEqual(state.playbackRate, 10);
 assert.deepStrictEqual(state.currentSegmentIndexes, [0]);
 slider.value = 500;
 slider.dispatchEvent(new Event('input'));
