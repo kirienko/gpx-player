@@ -89,6 +89,18 @@ def _normalize_track_layer_names(
     return normalized[:len(all_tracks)]
 
 
+def _segment_colors(all_tracks: List[dict], max_speed: float) -> List[List[str]]:
+    return [
+        [speed_to_color(speed, max_speed) for speed in track['seg_speeds']]
+        for track in all_tracks
+    ]
+
+
+def _playback_segment_color_scale(all_tracks: List[dict]) -> float:
+    positive_speeds = [speed for track in all_tracks for speed in track['seg_speeds'] if speed > 0]
+    return max(positive_speeds) if positive_speeds else 1.0
+
+
 def _parse_iso_datetime(s: str) -> dt.datetime:
     # fromisoformat accepts fractional seconds and common ISO variants;
     # normalise a trailing 'Z' to '+00:00' for Python < 3.11 compatibility.
@@ -309,6 +321,7 @@ def _add_animation_script(
     folium_map: folium.Map,
     all_tracks: List[dict],
     *,
+    max_speed: float,
     title: Optional[str],
     map_id: str,
     boat_legend_id: str,
@@ -321,6 +334,7 @@ def _add_animation_script(
     gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
     gpx_distances_data = [track['distances'] for track in all_tracks]
     gpx_avg_speeds_data = [track['avg_speeds'] for track in all_tracks]
+    gpx_segment_colors = _segment_colors(all_tracks, max_speed)
     track_names = [_display_name(track) for track in all_tracks]
     full_track_layer_names = _normalize_track_layer_names(all_tracks, track_layer_names)
     gpx_timestamps = sorted({p['time'] for track in all_tracks for p in track['points']})
@@ -333,6 +347,7 @@ def _add_animation_script(
         "speeds": gpx_speeds_data,
         "distances": gpx_distances_data,
         "avgSpeeds": gpx_avg_speeds_data,
+        "segmentColors": gpx_segment_colors,
         "trackNames": track_names,
         "timestamps": gpx_timestamps,
         "minTime": min_time,
@@ -400,6 +415,7 @@ def add_playback_controls(
     _add_animation_script(
         folium_map,
         all_tracks,
+        max_speed=max_speed,
         title=title,
         map_id=map_id,
         boat_legend_id=boat_legend_id,
@@ -470,6 +486,7 @@ def add_animation(folium_map: folium.Map,
     _add_animation_script(
         folium_map,
         all_tracks,
+        max_speed=_playback_segment_color_scale(all_tracks),
         title=title,
         map_id=map_id,
         boat_legend_id="boat-legend",

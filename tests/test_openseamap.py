@@ -191,6 +191,7 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert '"#d0d0d0"' in rendered
     assert '"tailPointCount": 60' in rendered
     assert '"fullTrackLayerNames": ["feature_group_' in rendered
+    assert '"segmentColors": [[' in rendered
     assert "gpx-player-track-visibility" in rendered
     assert "gpx-player-track-mode-select" in rendered
     assert "gpx-player-direction-marker" in rendered
@@ -692,9 +693,12 @@ global.L = {{
   polyline(latlngs) {{
     return {{
       latlngs,
+      options: arguments[1] || {{}},
       setLatLngCalls: 0,
+      styleCalls: [],
       addTo(targetMap) {{ targetMap.addLayer(this); return this; }},
       setLatLngs(nextLatLngs) {{ this.setLatLngCalls += 1; this.latlngs = nextLatLngs; }},
+      setStyle(nextStyle) {{ this.styleCalls.push(nextStyle); this.options = Object.assign({{}}, this.options, nextStyle); }},
     }};
   }},
   control() {{
@@ -722,6 +726,7 @@ window.gpxPlayerPlayback = {{
     speeds: [[0, 1, 2]],
     distances: [[0, 1, 2]],
     avgSpeeds: [[0, 1, 2]],
+    segmentColors: [['#111111', '#222222']],
     trackNames: ['Alpha'],
     timestamps: [
       '2024-06-15T12:00:00Z',
@@ -748,12 +753,17 @@ assert.strictEqual(state.fullTrackLayers[0], null);
 assert.ok(state.trackMarkers[0].icon.html.includes('gpx-player-direction-marker'));
 assert.ok(state.trackMarkers[0].icon.html.includes('border-bottom: 13px solid red'));
 const slider = state.slider;
-const tailLayer = state.tailLayers[0];
-assert.strictEqual(tailLayer.setLatLngCalls, 1);
+const tailStrokeLayer = state.tailStrokeLayers[0];
+const tailCoreLayers = state.tailCoreLayers[0];
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 1);
+assert.strictEqual(tailCoreLayers.length, 2);
+assert.strictEqual(tailCoreLayers[0].options.color, '#111111');
+assert.strictEqual(tailCoreLayers[0].options.weight, 2);
+assert.strictEqual(tailCoreLayers[0].options.opacity, 1);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
 slider.value = 750;
 slider.dispatchEvent(new Event('input'));
-assert.strictEqual(tailLayer.setLatLngCalls, 1);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 1);
 assert.deepStrictEqual(state.trackMarkers[0].latlng, [2, 1.5]);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(90deg)');
 slider.value = 250;
@@ -762,20 +772,27 @@ assert.deepStrictEqual(state.trackMarkers[0].latlng, [1.5, 1]);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
 state.trackModeControls[0].value = 'tail';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
-assert.strictEqual(tailLayer.setLatLngCalls, 2);
-assert.deepStrictEqual(tailLayer.latlngs, [[1, 1], [1.5, 1]]);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 2);
+assert.deepStrictEqual(tailStrokeLayer.latlngs, [[1, 1], [1.5, 1]]);
+assert.deepStrictEqual(tailCoreLayers[0].latlngs, [[1, 1], [1.5, 1]]);
+assert.strictEqual(map.hasLayer(tailStrokeLayer), true);
+assert.strictEqual(map.hasLayer(tailCoreLayers[0]), true);
 slider.value = 1000;
 slider.dispatchEvent(new Event('input'));
-assert.strictEqual(tailLayer.setLatLngCalls, 3);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 3);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(90deg)');
-assert.deepStrictEqual(tailLayer.latlngs, [[2, 1], [2, 2]]);
+assert.deepStrictEqual(tailStrokeLayer.latlngs, [[2, 1], [2, 2]]);
+assert.deepStrictEqual(tailCoreLayers[0].latlngs, [[2, 1], [2, 2]]);
+assert.strictEqual(tailCoreLayers[0].options.color, '#222222');
 state.trackModeControls[0].value = 'off';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
-assert.strictEqual(tailLayer.setLatLngCalls, 4);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 4);
 slider.value = 0;
 slider.dispatchEvent(new Event('input'));
-assert.strictEqual(tailLayer.setLatLngCalls, 4);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 4);
 assert.strictEqual(map.hasLayer(state.trackMarkers[0]), false);
+assert.strictEqual(map.hasLayer(tailStrokeLayer), false);
+assert.strictEqual(map.hasLayer(tailCoreLayers[0]), false);
 state.trackModeControls[0].value = 'full';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
 assert.strictEqual(map.hasLayer(state.trackMarkers[0]), true);
