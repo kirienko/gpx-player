@@ -1,7 +1,7 @@
 # Changelog
 All notable changes to **gpx-player** will be documented in this file.
 
-## 0.6.0 — 2026-07-09
+## 0.5.1 — 2026-07-09
 * **Map mode**: smooth displayed segment speeds over a short trailing time
   window, reducing repeated zero-distance GPS samples followed by jump artifacts
   while preserving genuine stationary periods.
