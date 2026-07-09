@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to **gpx-player** will be documented in this file.
 
+## 0.6.0 — 2026-07-09
+* **Map mode**: smooth displayed segment speeds over a short trailing time
+  window, reducing repeated zero-distance GPS samples followed by jump artifacts
+  while preserving genuine stationary periods.
+* Use the smoothed display speed for speed-colored map segments, playback tails,
+  and the live speed legend while keeping raw adjacent-point speeds available
+  internally.
+
 ## 0.5.0 — 2026-06-30
 * **Map mode**: replace the static circle marker with a directional arrow that rotates to show the vessel's current heading.
 * **Map mode**: add a track tail with configurable length (`--tail-length short|normal|long`); a per-track full/tail/off selector lets users toggle each track's display mode during playback.
