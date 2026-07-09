@@ -13,8 +13,10 @@ import gpxpy.geo
 
 from gpx_player.openseamap import (
     add_playback_controls,
+    calculate_display_speeds,
     accumulate_distances,
     calculate_average_speeds,
+    calculate_speeds,
     create_map,
     create_playback_map,
     parse_gpx,
@@ -140,6 +142,39 @@ def test_accumulate_distances_and_avg_speed():
     assert avgs[2] == pytest.approx(expected_third / 2.0)
 
 
+def test_display_speeds_smooth_zero_jump_quantization():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    points = [
+        {'lat': 0.0, 'lon': 0.0, 'time': t0},
+        {'lat': 0.0, 'lon': 0.0, 'time': t0 + dt.timedelta(seconds=1)},
+        {'lat': 0.0, 'lon': 0.0, 'time': t0 + dt.timedelta(seconds=2)},
+        {'lat': 0.0, 'lon': 0.00006, 'time': t0 + dt.timedelta(seconds=3)},
+    ]
+
+    raw_speeds = calculate_speeds(points, max_speed=20.0)
+    display_speeds = calculate_display_speeds(points, max_speed=20.0, window_seconds=3.0)
+
+    assert raw_speeds[:2] == [0, 0]
+    assert raw_speeds[2] > 12.0
+    assert display_speeds[:2] == [0.0, 0.0]
+    assert display_speeds[2] == pytest.approx(raw_speeds[2] / 3.0)
+
+
+def test_display_speeds_preserve_sustained_stops():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    points = [
+        {'lat': 0.0, 'lon': 0.0, 'time': t0},
+        {'lat': 0.0, 'lon': 0.00003, 'time': t0 + dt.timedelta(seconds=1)},
+        {'lat': 0.0, 'lon': 0.00003, 'time': t0 + dt.timedelta(seconds=11)},
+        {'lat': 0.0, 'lon': 0.00003, 'time': t0 + dt.timedelta(seconds=21)},
+    ]
+
+    display_speeds = calculate_display_speeds(points, max_speed=20.0, window_seconds=10.0)
+
+    assert display_speeds[0] > 0
+    assert display_speeds[1:] == [0.0, 0.0]
+
+
 def test_create_map_default_unchanged():
     path, _t0 = _write_sample_gpx(n_points=6)
     folium_map, all_tracks, _max_speed, _map_id = create_map([path], names=None, max_speed=12.0)
@@ -191,6 +226,7 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert '"#d0d0d0"' in rendered
     assert '"tailPointCount": 60' in rendered
     assert '"fullTrackLayerNames": ["feature_group_' in rendered
+    assert '"segmentColors": [[' in rendered
     assert "gpx-player-track-visibility" in rendered
     assert "gpx-player-track-mode-select" in rendered
     assert "gpx-player-direction-marker" in rendered
@@ -692,9 +728,12 @@ global.L = {{
   polyline(latlngs) {{
     return {{
       latlngs,
+      options: arguments[1] || {{}},
       setLatLngCalls: 0,
+      styleCalls: [],
       addTo(targetMap) {{ targetMap.addLayer(this); return this; }},
       setLatLngs(nextLatLngs) {{ this.setLatLngCalls += 1; this.latlngs = nextLatLngs; }},
+      setStyle(nextStyle) {{ this.styleCalls.push(nextStyle); this.options = Object.assign({{}}, this.options, nextStyle); }},
     }};
   }},
   control() {{
@@ -722,6 +761,7 @@ window.gpxPlayerPlayback = {{
     speeds: [[0, 1, 2]],
     distances: [[0, 1, 2]],
     avgSpeeds: [[0, 1, 2]],
+    segmentColors: [['#111111', '#222222']],
     trackNames: ['Alpha'],
     timestamps: [
       '2024-06-15T12:00:00Z',
@@ -748,12 +788,17 @@ assert.strictEqual(state.fullTrackLayers[0], null);
 assert.ok(state.trackMarkers[0].icon.html.includes('gpx-player-direction-marker'));
 assert.ok(state.trackMarkers[0].icon.html.includes('border-bottom: 13px solid red'));
 const slider = state.slider;
-const tailLayer = state.tailLayers[0];
-assert.strictEqual(tailLayer.setLatLngCalls, 1);
+const tailStrokeLayer = state.tailStrokeLayers[0];
+const tailCoreLayers = state.tailCoreLayers[0];
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 1);
+assert.strictEqual(tailCoreLayers.length, 2);
+assert.strictEqual(tailCoreLayers[0].options.color, '#111111');
+assert.strictEqual(tailCoreLayers[0].options.weight, 2);
+assert.strictEqual(tailCoreLayers[0].options.opacity, 1);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
 slider.value = 750;
 slider.dispatchEvent(new Event('input'));
-assert.strictEqual(tailLayer.setLatLngCalls, 1);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 1);
 assert.deepStrictEqual(state.trackMarkers[0].latlng, [2, 1.5]);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(90deg)');
 slider.value = 250;
@@ -762,20 +807,27 @@ assert.deepStrictEqual(state.trackMarkers[0].latlng, [1.5, 1]);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(0deg)');
 state.trackModeControls[0].value = 'tail';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
-assert.strictEqual(tailLayer.setLatLngCalls, 2);
-assert.deepStrictEqual(tailLayer.latlngs, [[1, 1], [1.5, 1]]);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 2);
+assert.deepStrictEqual(tailStrokeLayer.latlngs, [[1, 1], [1.5, 1]]);
+assert.deepStrictEqual(tailCoreLayers[0].latlngs, [[1, 1], [1.5, 1]]);
+assert.strictEqual(map.hasLayer(tailStrokeLayer), true);
+assert.strictEqual(map.hasLayer(tailCoreLayers[0]), true);
 slider.value = 1000;
 slider.dispatchEvent(new Event('input'));
-assert.strictEqual(tailLayer.setLatLngCalls, 3);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 3);
 assert.strictEqual(state.trackMarkers[0].arrow.style.transform, 'rotate(90deg)');
-assert.deepStrictEqual(tailLayer.latlngs, [[2, 1], [2, 2]]);
+assert.deepStrictEqual(tailStrokeLayer.latlngs, [[2, 1], [2, 2]]);
+assert.deepStrictEqual(tailCoreLayers[0].latlngs, [[2, 1], [2, 2]]);
+assert.strictEqual(tailCoreLayers[0].options.color, '#222222');
 state.trackModeControls[0].value = 'off';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
-assert.strictEqual(tailLayer.setLatLngCalls, 4);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 4);
 slider.value = 0;
 slider.dispatchEvent(new Event('input'));
-assert.strictEqual(tailLayer.setLatLngCalls, 4);
+assert.strictEqual(tailStrokeLayer.setLatLngCalls, 4);
 assert.strictEqual(map.hasLayer(state.trackMarkers[0]), false);
+assert.strictEqual(map.hasLayer(tailStrokeLayer), false);
+assert.strictEqual(map.hasLayer(tailCoreLayers[0]), false);
 state.trackModeControls[0].value = 'full';
 state.trackModeControls[0].dispatchEvent(new Event('change'));
 assert.strictEqual(map.hasLayer(state.trackMarkers[0]), true);
@@ -1431,9 +1483,50 @@ def test_create_map_with_time_window():
     assert points[-1]['time'] == end
     # Parallel arrays must line up with the filtered points.
     assert len(all_tracks[0]['seg_speeds']) == 3
+    assert len(all_tracks[0]['display_seg_speeds']) == 3
     assert len(all_tracks[0]['distances']) == 4
     assert len(all_tracks[0]['avg_speeds']) == 4
     assert len(all_tracks[0]['point_speeds']) == 4
+    assert len(all_tracks[0]['display_point_speeds']) == 4
+
+
+def test_create_map_uses_display_speeds_for_rendered_speed_scale():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    pts_xml = []
+    for seconds, lon in [(0, 0.0), (1, 0.0), (2, 0.0), (3, 0.00006)]:
+        t = (t0 + dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        pts_xml.append(
+            f'            <trkpt lat="0.0" lon="{lon}">\n'
+            f'                <time>{t}</time>\n'
+            f'            </trkpt>'
+        )
+    gpx = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" creator="pytest">\n'
+        '    <trk>\n'
+        '        <name>Quantized Track</name>\n'
+        '        <trkseg>\n'
+        + "\n".join(pts_xml) + "\n"
+        '        </trkseg>\n'
+        '    </trk>\n'
+        '</gpx>'
+    )
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.gpx') as temp_gpx:
+        temp_gpx.write(gpx)
+        path = temp_gpx.name
+
+    _map, all_tracks, max_speed, _map_id = create_map(
+        [path], names=None, max_speed=20.0, show_layer_control=False,
+    )
+    track = all_tracks[0]
+
+    assert track['seg_speeds'][:2] == [0, 0]
+    assert track['seg_speeds'][2] > 12.0
+    assert track['display_seg_speeds'][:2] == [0.0, 0.0]
+    assert track['display_seg_speeds'][2] == pytest.approx(track['seg_speeds'][2] / 3.0)
+    assert track['display_point_speeds'] == [0.0] + track['display_seg_speeds']
+    assert track['point_speeds'] == [0.0] + track['seg_speeds']
+    assert max_speed == pytest.approx(track['display_seg_speeds'][2])
 
 
 def test_create_map_keeps_fallback_max_speed_when_no_positive_speed():

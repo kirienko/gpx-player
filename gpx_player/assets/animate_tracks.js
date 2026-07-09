@@ -43,14 +43,17 @@
         const timeLegend = createTimeLegend(state, slider);
         const boatLegend = document.getElementById(state.boatLegendId);
         const trackMarkers = initializeTrackMarkers(map, state);
-        const tailLayers = initializeTailLayers(state);
+        const tailStrokeLayers = initializeTailStrokeLayers(state);
+        const tailCoreLayers = initializeTailCoreLayers(state);
         const visibilityControl = createTrackVisibilityControl(state);
 
         state.slider = slider;
         state.timeLegend = timeLegend;
         state.boatLegend = boatLegend;
         state.trackMarkers = trackMarkers;
-        state.tailLayers = tailLayers;
+        state.tailStrokeLayers = tailStrokeLayers;
+        state.tailCoreLayers = tailCoreLayers;
+        state.tailLayers = tailStrokeLayers;
         state.visibilityControl = visibilityControl;
 
         document.body.appendChild(slider);
@@ -306,15 +309,31 @@ ${sliderSelector}::-moz-range-thumb {
         return state.points.map((track) => trackHeadingAtIndex(track, 0, 0));
     }
 
-    function initializeTailLayers(state) {
+    function initializeTailStrokeLayers(state) {
         return state.points.map((_track, index) => {
             const color = state.colors[index % state.colors.length];
             return L.polyline([], {
                 color: color,
-                weight: 3,
+                weight: 4,
                 opacity: 0.9,
                 interactive: false
             });
+        });
+    }
+
+    function initializeTailCoreLayers(state) {
+        const tailPointCount = Math.max(1, parseInt(state.tailPointCount, 10) || 60);
+        return state.points.map((_track, trackIndex) => {
+            const segmentColors = (state.segmentColors && state.segmentColors[trackIndex]) || [];
+            const fallbackColor = state.colors[trackIndex % state.colors.length];
+            return Array.from({length: tailPointCount}, (_unused, segmentIndex) => (
+                L.polyline([], {
+                    color: segmentColors[segmentIndex] || fallbackColor,
+                    weight: 2,
+                    opacity: 1,
+                    interactive: false
+                })
+            ));
         });
     }
 
@@ -727,16 +746,73 @@ ${sliderSelector}::-moz-range-thumb {
         return latlngs;
     }
 
-    function updateTailLayers(state) {
+    function updateTailStrokeLayer(state, trackIndex, latlngs) {
         const map = state.map;
-        state.tailLayers.forEach((tailLayer, trackIndex) => {
+        const tailStrokeLayer = state.tailStrokeLayers[trackIndex];
+        if (!tailStrokeLayer) {
+            return;
+        }
+        tailStrokeLayer.setLatLngs(latlngs);
+        if (!map.hasLayer(tailStrokeLayer)) {
+            tailStrokeLayer.addTo(map);
+        }
+    }
+
+    function updateTailCoreLayersForTrack(state, trackIndex, latlngs) {
+        const map = state.map;
+        const startIndex = Math.max(
+            0,
+            (state.currentPointIndexes[trackIndex] || 0) - (Math.max(1, parseInt(state.tailPointCount, 10) || 60) - 1)
+        );
+        const segmentColors = (state.segmentColors && state.segmentColors[trackIndex]) || [];
+        const coreLayers = state.tailCoreLayers[trackIndex] || [];
+        const visibleSegmentCount = Math.max(0, latlngs.length - 1);
+
+        coreLayers.forEach((layer, segmentOffset) => {
+            if (segmentOffset < visibleSegmentCount) {
+                const color = segmentColors[startIndex + segmentOffset] || state.colors[trackIndex % state.colors.length];
+                if (layer.setStyle) {
+                    layer.setStyle({color: color});
+                }
+                layer.setLatLngs([latlngs[segmentOffset], latlngs[segmentOffset + 1]]);
+                if (!map.hasLayer(layer)) {
+                    layer.addTo(map);
+                }
+                return;
+            }
+            layer.setLatLngs([]);
+            if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+            }
+        });
+    }
+
+    function clearTailLayers(state, trackIndex) {
+        const map = state.map;
+        const tailStrokeLayer = state.tailStrokeLayers[trackIndex];
+        const tailCoreLayers = state.tailCoreLayers[trackIndex] || [];
+        if (tailStrokeLayer) {
+            tailStrokeLayer.setLatLngs([]);
+            if (map.hasLayer(tailStrokeLayer)) {
+                map.removeLayer(tailStrokeLayer);
+            }
+        }
+        tailCoreLayers.forEach((layer) => {
+            layer.setLatLngs([]);
+            if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+            }
+        });
+    }
+
+    function updateTailLayers(state) {
+        state.tailStrokeLayers.forEach((_tailStrokeLayer, trackIndex) => {
             if (state.trackModes[trackIndex] !== 'tail') {
                 return;
             }
-            tailLayer.setLatLngs(tailLatLngs(state, trackIndex));
-            if (!map.hasLayer(tailLayer)) {
-                tailLayer.addTo(map);
-            }
+            const latlngs = tailLatLngs(state, trackIndex);
+            updateTailStrokeLayer(state, trackIndex, latlngs);
+            updateTailCoreLayersForTrack(state, trackIndex, latlngs);
         });
     }
 
@@ -774,19 +850,14 @@ ${sliderSelector}::-moz-range-thumb {
         const map = state.map;
         const mode = state.trackModes[trackIndex];
         const fullLayer = state.fullTrackLayers[trackIndex];
-        const tailLayer = state.tailLayers[trackIndex];
+        const tailStrokeLayer = state.tailStrokeLayers[trackIndex];
         const marker = state.trackMarkers[trackIndex];
 
         if (mode === 'full') {
             if (fullLayer && !map.hasLayer(fullLayer)) {
                 fullLayer.addTo(map);
             }
-            if (tailLayer) {
-                tailLayer.setLatLngs([]);
-                if (map.hasLayer(tailLayer)) {
-                    map.removeLayer(tailLayer);
-                }
-            }
+            clearTailLayers(state, trackIndex);
             if (marker && !map.hasLayer(marker)) {
                 marker.addTo(map);
             }
@@ -801,21 +872,15 @@ ${sliderSelector}::-moz-range-thumb {
             if (marker && !map.hasLayer(marker)) {
                 marker.addTo(map);
             }
-            if (tailLayer) {
-                tailLayer.setLatLngs(tailLatLngs(state, trackIndex));
-                if (!map.hasLayer(tailLayer)) {
-                    tailLayer.addTo(map);
-                }
+            if (tailStrokeLayer) {
+                const latlngs = tailLatLngs(state, trackIndex);
+                updateTailStrokeLayer(state, trackIndex, latlngs);
+                updateTailCoreLayersForTrack(state, trackIndex, latlngs);
             }
             return;
         }
 
-        if (tailLayer) {
-            tailLayer.setLatLngs([]);
-            if (map.hasLayer(tailLayer)) {
-                map.removeLayer(tailLayer);
-            }
-        }
+        clearTailLayers(state, trackIndex);
         if (marker && map.hasLayer(marker)) {
             map.removeLayer(marker);
         }

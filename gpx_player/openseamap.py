@@ -26,6 +26,7 @@ _TAIL_LENGTH_PRESETS = {
     "normal": 60,
     "long": 120,
 }
+_DISPLAY_SPEED_WINDOW_SECONDS = 10.0
 
 
 def _read_asset_text(filename: str) -> str:
@@ -87,6 +88,26 @@ def _normalize_track_layer_names(
     if len(normalized) < len(all_tracks):
         normalized.extend([None] * (len(all_tracks) - len(normalized)))
     return normalized[:len(all_tracks)]
+
+
+def _segment_colors(all_tracks: List[dict], max_speed: float) -> List[List[str]]:
+    return [
+        [
+            speed_to_color(speed, max_speed)
+            for speed in track.get('display_seg_speeds', track['seg_speeds'])
+        ]
+        for track in all_tracks
+    ]
+
+
+def _playback_segment_color_scale(all_tracks: List[dict]) -> float:
+    positive_speeds = [
+        speed
+        for track in all_tracks
+        for speed in track.get('display_seg_speeds', track['seg_speeds'])
+        if speed > 0
+    ]
+    return max(positive_speeds) if positive_speeds else 1.0
 
 
 def _parse_iso_datetime(s: str) -> dt.datetime:
@@ -156,6 +177,46 @@ def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
             speeds.append(speed)
         else:
             speeds.append(0)
+    return speeds
+
+
+def calculate_display_speeds(
+    points: List[dict],
+    max_speed: float,
+    window_seconds: float = _DISPLAY_SPEED_WINDOW_SECONDS,
+) -> List[float]:
+    """Return segment display speeds smoothed over a trailing time window."""
+    if len(points) < 2:
+        return []
+    if window_seconds <= 0:
+        return calculate_speeds(points, max_speed)
+
+    cumulative_meters = [0.0]
+    for i in range(1, len(points)):
+        lat1, lon1 = points[i - 1]['lat'], points[i - 1]['lon']
+        lat2, lon2 = points[i]['lat'], points[i]['lon']
+        distance = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2)
+        cumulative_meters.append(cumulative_meters[-1] + distance)
+
+    speeds = []
+    for i in range(1, len(points)):
+        end_time = points[i]['time']
+        start_index = i - 1
+        while start_index > 0:
+            elapsed = (end_time - points[start_index]['time']).total_seconds()
+            if elapsed >= window_seconds:
+                break
+            start_index -= 1
+
+        elapsed = (end_time - points[start_index]['time']).total_seconds()
+        if elapsed > 0:
+            distance = cumulative_meters[i] - cumulative_meters[start_index]
+            speed = (distance / elapsed) * 1.94384
+            if speed > max_speed:
+                speed = 0
+            speeds.append(speed)
+        else:
+            speeds.append(0.0)
     return speeds
 
 
@@ -251,20 +312,24 @@ def create_map(
                       f"[{start_time}, {end_time}]; skipping.")
                 continue
             seg_speeds = calculate_speeds(points, max_speed)
+            display_seg_speeds = calculate_display_speeds(points, max_speed)
             distances = accumulate_distances(points)
             avg_speeds = calculate_average_speeds(points, distances)
             point_speeds = [0.0] + seg_speeds
+            display_point_speeds = [0.0] + display_seg_speeds
             all_tracks.append({
                 'name': track['name'],
                 'display_name': display_name,
                 'points': points,
                 'point_speeds': point_speeds,
+                'display_point_speeds': display_point_speeds,
                 'distances': distances,
                 'avg_speeds': avg_speeds,
                 'seg_speeds': seg_speeds,
+                'display_seg_speeds': display_seg_speeds,
             })
 
-    positive_speeds = [s for track in all_tracks for s in track['seg_speeds'] if s > 0]
+    positive_speeds = [s for track in all_tracks for s in track['display_seg_speeds'] if s > 0]
     if positive_speeds:
         max_speed = max(positive_speeds)
 
@@ -279,7 +344,7 @@ def create_map(
     for i, track in enumerate(all_tracks):
         color = _TRACK_COLORS[i % len(_TRACK_COLORS)]
         lat_lon = [(p['lat'], p['lon']) for p in track['points']]
-        speeds = track['seg_speeds']
+        speeds = track['display_seg_speeds']
         times = [p['time'].strftime('%Y-%m-%d %H:%M:%S') for p in track['points']]
         name = _display_name(track)
         escaped_name = html_escape(name, quote=True)
@@ -309,6 +374,7 @@ def _add_animation_script(
     folium_map: folium.Map,
     all_tracks: List[dict],
     *,
+    max_speed: float,
     title: Optional[str],
     map_id: str,
     boat_legend_id: str,
@@ -318,9 +384,13 @@ def _add_animation_script(
     track_layer_names: Optional[Sequence[Optional[str]]] = None,
 ) -> None:
     gpx_points_data = [track['points'] for track in all_tracks]
-    gpx_speeds_data = [track['point_speeds'] for track in all_tracks]
+    gpx_speeds_data = [
+        track.get('display_point_speeds', track['point_speeds'])
+        for track in all_tracks
+    ]
     gpx_distances_data = [track['distances'] for track in all_tracks]
     gpx_avg_speeds_data = [track['avg_speeds'] for track in all_tracks]
+    gpx_segment_colors = _segment_colors(all_tracks, max_speed)
     track_names = [_display_name(track) for track in all_tracks]
     full_track_layer_names = _normalize_track_layer_names(all_tracks, track_layer_names)
     gpx_timestamps = sorted({p['time'] for track in all_tracks for p in track['points']})
@@ -333,6 +403,7 @@ def _add_animation_script(
         "speeds": gpx_speeds_data,
         "distances": gpx_distances_data,
         "avgSpeeds": gpx_avg_speeds_data,
+        "segmentColors": gpx_segment_colors,
         "trackNames": track_names,
         "timestamps": gpx_timestamps,
         "minTime": min_time,
@@ -400,6 +471,7 @@ def add_playback_controls(
     _add_animation_script(
         folium_map,
         all_tracks,
+        max_speed=max_speed,
         title=title,
         map_id=map_id,
         boat_legend_id=boat_legend_id,
@@ -470,6 +542,7 @@ def add_animation(folium_map: folium.Map,
     _add_animation_script(
         folium_map,
         all_tracks,
+        max_speed=_playback_segment_color_scale(all_tracks),
         title=title,
         map_id=map_id,
         boat_legend_id="boat-legend",
