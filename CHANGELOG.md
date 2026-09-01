@@ -1,6 +1,29 @@
 # Changelog
 All notable changes to **gpx-player** will be documented in this file.
 
+## 0.5.2 – 2026-09-01
+* **Packaging**: constrain package discovery. The flat layout made setuptools
+  ship every top-level directory, so published wheels installed a top-level
+  `tests` package into `site-packages`. `tests`, `scripts`, `build` and `dist`
+  are now excluded; `schema` is kept, because `validator.load_schema()` reads
+  `site-packages/schema/` and dropping it would break `gpx-validate`.
+* **Potentially breaking:** require Python 3.9 or newer. The code has needed it
+  since builtin generic annotations (`tuple[str, int]`) and
+  `importlib.resources.files()` were introduced; `requires-python` still
+  claimed 3.8. Removed the now-dead Python 3.8 fallback in `_read_asset_text()`.
+* Test the declared floor: CI runs the suite on Python 3.9 and 3.13.
+* Publish the interactive OpenSeaMap demo from this repository via GitHub Pages
+  (`scripts/build_demo.py` plus a Pages workflow), instead of a hand-copied HTML
+  file in a separate repository, so it cannot drift from the code.
+* Documentation: document `--max-speed`, the real output filenames, the
+  per-mode option sets and the differing timestamp formats; describe the
+  arrow marker, dual-colour tail and speed smoothing added in 0.5.x; add a
+  "For AI agents" section; fix a `--start`/`--end` example whose dates were
+  outside the example tracks; note that the `gpx-player` console script exits
+  `1` even on success (#21).
+* Repository cleanup: delete the empty, unreferenced `legend.js` and root
+  `__init__.py`; untrack `gpx_player.egg-info/` and ignore build artefacts.
+
 ## 0.5.1 — 2026-07-09
 * **Map mode**: smooth displayed segment speeds over a short trailing time
   window, reducing repeated zero-distance GPS samples followed by jump artifacts
