@@ -11,7 +11,14 @@ All notable changes to **gpx-player** will be documented in this file.
   since builtin generic annotations (`tuple[str, int]`) and
   `importlib.resources.files()` were introduced; `requires-python` still
   claimed 3.8. Removed the now-dead Python 3.8 fallback in `_read_asset_text()`.
+* `gpx-validate`: print the unsupported/missing GPX version error to stderr
+  instead of stdout. The command already exited `1`, but the reason went to
+  stdout because that branch calls `sys.exit()` rather than raising
+  `GPXValidationError`.
 * Test the declared floor: CI runs the suite on Python 3.9 and 3.13.
+* CI hardening: update `actions/checkout` and `actions/setup-python` to
+  supported major versions, stop persisting checkout credentials in the test
+  job, and scope the Pages deployment permissions to the deploy job.
 * Publish the interactive OpenSeaMap demo from this repository via GitHub Pages
   (`scripts/build_demo.py` plus a Pages workflow), instead of a hand-copied HTML
   file in a separate repository, so it cannot drift from the code.
