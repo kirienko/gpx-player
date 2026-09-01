@@ -96,7 +96,7 @@ pytest
 
 Pass one or more GPX file paths as positional arguments:
 ```bash
-gpx-player example-data/track1.gpx example-data/track2.gpx
+python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
 ```
 
 > **Known issue.** `gpx_player/main.py` has no `main()` function (the whole
@@ -105,7 +105,7 @@ gpx-player example-data/track1.gpx example-data/track2.gpx
 > correctly and *then* fails with `ImportError: cannot import name 'main'`,
 > exiting with status `1` ([#21](https://github.com/kirienko/gpx-player/issues/21)).
 > Until that is fixed, prefer the module form, which behaves identically and
-> exits `0`:
+> exits `0`. The examples below use it for that reason:
 >
 > ```bash
 > python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
@@ -113,7 +113,7 @@ gpx-player example-data/track1.gpx example-data/track2.gpx
 
 A more sophisticated example, which produced the video above:
 ```bash
-gpx-player example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
+python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
        --start 2023-07-01T10:53:00+0000 \
        --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
        --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
@@ -208,13 +208,14 @@ folium_map.save("boat_tracks.html")
 ```
 
 `create_playback_map(gpx_files, names=None, *, max_speed=12, title=None,
-start_time=None, end_time=None, slider_active_color=None,
-slider_inactive_color=None, tail_length="normal")` returns a `folium.Map`, so
+start_time=None, end_time=None, slider_active_color="#6e6e6e",
+slider_inactive_color="#d0d0d0", tail_length="normal")` returns a `folium.Map`, so
 you can add your own layers before saving, or render it into an existing page.
 `start_time` / `end_time` are timezone-aware `datetime` objects and are the
 programmatic equivalent of `--start` / `--end`.
 `slider_active_color` and `slider_inactive_color` are Python-only arguments for
-theming the played and unplayed sections of the playback slider.
+theming the played and unplayed sections of the playback slider; they default to
+the built-in greys shown above, and passing `None` selects those same defaults.
 
 Lower-level building blocks are public too:
 
@@ -372,8 +373,11 @@ deterministic: nothing is uploaded, and the only network access happens in the
 1. **Validate first.** Call `validate_gpx(path)` (or `gpx-validate path`) on every
    input before rendering. Most rendering failures are bad input, and the
    validator gives a specific reason where the renderer gives a traceback.
-2. **Clean if needed.** If validation complains about vendor `<extensions>`,
-   run `clean_gpx_file(path)` and use the returned path.
+2. **Clean if needed.** `clean_gpx_file(path)` strips vendor `<extensions>`,
+   but it runs `validate_gpx(path, strict=True)` *first* and raises
+   `GPXValidationError` if that fails, so it can only clean files that already
+   validate. To strip extensions from a file that does **not** validate, call
+   `gpx_utils.remove_extensions_tags(path)` directly, which does no validation.
 3. **Render via the Python API, not the CLI.** `create_playback_map()` returns a
    `folium.Map`, so you choose the output path. The map-mode CLI always writes
    `boat_tracks.html` into the current working directory and overwrites it,
@@ -419,7 +423,7 @@ print(out)
 | `python -m gpx_player.clean_gpx FILE` | CLI | one GPX path | `FILE_noext.gpx`, or in place with `--overwrite` |
 | `openseamap.create_playback_map(...)` | API | list of paths | `folium.Map`, caller chooses the path |
 | `openseamap.create_map(...)` | API | list of paths | `(folium.Map, tracks, max_speed, map_id)` |
-| `validator.validate_gpx(...)` | API | one path | `True`, or raises `GPXValidationError` |
+| `validator.validate_gpx(...)` | API | one path | `True`, or raises `GPXValidationError` (also `SystemExit` on a bad `version`, see below) |
 | `gpx_utils.trim_track(...)` | API | parsed track dict | trimmed copy, input untouched |
 
 ### Failure modes to expect

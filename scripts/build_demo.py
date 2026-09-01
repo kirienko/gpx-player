@@ -27,6 +27,7 @@ DEMO_TRACKS = [
 
 
 def build(output_dir: Path) -> Path:
+    """Render the demo tracks into ``output_dir/index.html`` and return its path."""
     names = [name for name, _ in DEMO_TRACKS]
     files = [str(EXAMPLE_DATA / filename) for _, filename in DEMO_TRACKS]
 
@@ -49,6 +50,7 @@ def build(output_dir: Path) -> Path:
 
 
 def main() -> None:
+    """Parse command-line arguments and build the demo site."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--output-dir",

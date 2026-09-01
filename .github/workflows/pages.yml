@@ -9,10 +9,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Only the deploy job needs the Pages deployment credentials; see the job below.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Let a newer commit supersede an in-flight deployment, but never cancel a
 # deployment that is already publishing.
@@ -48,6 +47,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
