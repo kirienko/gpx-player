@@ -103,8 +103,9 @@ gpx-player example-data/track1.gpx example-data/track2.gpx
 > script runs at import time), but `pyproject.toml` declares the entry point as
 > `gpx_player.main:main`. The `gpx-player` command therefore renders the file
 > correctly and *then* fails with `ImportError: cannot import name 'main'`,
-> exiting with status `1`. Until that is fixed, prefer the module form, which
-> behaves identically and exits `0`:
+> exiting with status `1` ([#21](https://github.com/kirienko/gpx-player/issues/21)).
+> Until that is fixed, prefer the module form, which behaves identically and
+> exits `0`:
 >
 > ```bash
 > python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
@@ -437,7 +438,8 @@ print(out)
   the environment. MP4 output additionally needs `ffmpeg` on `PATH`; without it
   matplotlib silently falls back to Pillow. GIF output does not need `ffmpeg`.
 * **The `gpx-player` command exits `1` even on success.** Its entry point is
-  broken (see the known issue under [Video mode](#video-mode)), so exit status
+  broken ([#21](https://github.com/kirienko/gpx-player/issues/21), see the note
+  under [Video mode](#video-mode)), so exit status
   is not a usable success signal there. Call
   `python -m gpx_player.main ...` instead, and in either case verify that the
   expected output file exists rather than trusting the return code.
