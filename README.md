@@ -27,8 +27,10 @@ For sailing races, it also calculates the distance covered after the 'start' sig
 
 The file is written to the current directory and named after `--title`
 (slugified), so `--title "Race 1"` produces `race-1.mp4`. Without a title you get
-`untitled.mp4`. MP4 output wants `ffmpeg` on your `PATH`; without it matplotlib
-falls back to its Pillow writer and warns. `--gif` does not need `ffmpeg`.
+`untitled.mp4`. **MP4 output requires `ffmpeg` on your `PATH`.** Without it
+matplotlib falls back to its Pillow writer, which cannot encode MP4, and the run
+dies with `ValueError: unknown file extension: .mp4` after rendering every frame,
+leaving no output file. `--gif` works without `ffmpeg`.
 
 ##### Example:
 ![Example output](example.gif "Example of the script output")
@@ -364,9 +366,16 @@ This section is a compact contract for LLM agents and automated pipelines that
 drive `gpx-player`. Humans can skip it.
 
 **What this package does:** turns GPX track files into either a rendered
-animation (MP4/GIF) or a self-contained interactive HTML map. It is offline and
-deterministic: nothing is uploaded, and the only network access happens in the
-*viewer's* browser, when the generated HTML fetches map tiles.
+animation (MP4/GIF) or a single-file interactive HTML map. Generation itself is
+offline and deterministic: the track data is inlined into the page and nothing
+is uploaded.
+
+The generated page is *not* self-contained at view time. Folium references
+Leaflet, jQuery and Bootstrap from `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`,
+`code.jquery.com` and `netdna.bootstrapcdn.com`, on top of the map tiles. In a
+browser that cannot reach those hosts the map does not initialise at all, so do
+not treat the output as an offline artifact or promise a viewer it will work
+air-gapped.
 
 ### Recommended workflow
 
@@ -439,8 +448,10 @@ print(out)
   warning; if *all* tracks are empty the map CLI prints a message and writes
   nothing. Check that the output file exists rather than assuming it does.
 * **Headless rendering.** Video mode uses matplotlib; set `MPLBACKEND=Agg` in
-  the environment. MP4 output additionally needs `ffmpeg` on `PATH`; without it
-  matplotlib silently falls back to Pillow. GIF output does not need `ffmpeg`.
+  the environment. MP4 output additionally requires `ffmpeg` on `PATH`: without
+  it the run renders every frame and *then* dies with `ValueError: unknown file
+  extension: .mp4`, writing nothing. Check for `ffmpeg` before choosing MP4, or
+  use `--gif`, which does not need it.
 * **The `gpx-player` command exits `1` even on success.** Its entry point is
   broken ([#21](https://github.com/kirienko/gpx-player/issues/21), see the note
   under [Video mode](#video-mode)), so exit status
@@ -450,6 +461,9 @@ print(out)
 * **Blocked map tiles.** A generated HTML opened over `file://` may show
   "blocked" tiles. Serve it over HTTP, see
   [OpenStreetMap tile access](#openstreetmap-tile-access).
+* **Blocked CDNs.** If the viewer cannot reach the JS/CSS hosts listed above,
+  the page loads but the map never initialises, and it fails quietly: the static
+  legend still renders, so "the HTML looks fine" is not evidence the map works.
 * **Track-to-name mapping.** Names are matched to tracks in file order, and a
   single GPX file may contain several `<trk>` elements. If a file has more than
   one track, supply one name per *track*, not per file.
