@@ -1,4 +1,0 @@
-example-data
-gpx_player
-schema
-tests

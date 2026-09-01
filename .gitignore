@@ -11,3 +11,8 @@ __pycache__/
 # Locally built demo site (published from CI, see .github/workflows/pages.yml)
 site/
 boat_tracks.html
+
+# Build artefacts
+*.egg-info/
+build/
+dist/
