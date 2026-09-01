@@ -27,7 +27,8 @@ For sailing races, it also calculates the distance covered after the 'start' sig
 
 The file is written to the current directory and named after `--title`
 (slugified), so `--title "Race 1"` produces `race-1.mp4`. Without a title you get
-`untitled.mp4`. MP4 output requires `ffmpeg` on your `PATH`; `--gif` does not.
+`untitled.mp4`. MP4 output wants `ffmpeg` on your `PATH`; without it matplotlib
+falls back to its Pillow writer and warns. `--gif` does not need `ffmpeg`.
 
 ##### Example:
 ![Example output](example.gif "Example of the script output")
@@ -98,6 +99,17 @@ Pass one or more GPX file paths as positional arguments:
 gpx-player example-data/track1.gpx example-data/track2.gpx
 ```
 
+> **Known issue.** `gpx_player/main.py` has no `main()` function (the whole
+> script runs at import time), but `pyproject.toml` declares the entry point as
+> `gpx_player.main:main`. The `gpx-player` command therefore renders the file
+> correctly and *then* fails with `ImportError: cannot import name 'main'`,
+> exiting with status `1`. Until that is fixed, prefer the module form, which
+> behaves identically and exits `0`:
+>
+> ```bash
+> python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
+> ```
+
 A more sophisticated example, which produced the video above:
 ```bash
 gpx-player example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
@@ -143,7 +155,7 @@ distance, map bounds and the animation slider all reflect only the filtered
 segment:
 ```bash
 python -m gpx_player.openseamap --files example-data/osm-demo-Alex.gpx \
-     --start 2024-07-24T18:10:00+0200 --end 2024-07-24T18:30:00+0200
+     --start 2024-06-15T17:00:00+0200 --end 2024-06-15T17:30:00+0200
 ```
 
 #### Map mode options
@@ -159,8 +171,8 @@ python -m gpx_player.openseamap --files example-data/osm-demo-Alex.gpx \
 | `--tail-length` | Length of the moving tail: `short` (30 points), `normal` (60, default) or `long` (120). |
 
 Map mode accepts any ISO 8601 timestamp with a timezone, so
-`2024-07-24T18:10:00+0200`, `2024-07-24T18:10:00+02:00` and
-`2024-07-24T16:10:00Z` are all valid. This is more permissive than video mode.
+`2024-06-15T17:00:00+0200`, `2024-06-15T17:00:00+02:00` and
+`2024-06-15T15:00:00Z` are all valid. This is more permissive than video mode.
 
 Video-mode options that do **not** exist in map mode: `--race_start`,
 `--marks`, `--gif` and `--timezone`. Map-mode timestamps are shown in UTC.
@@ -387,8 +399,8 @@ folium_map = create_playback_map(
     names=["Alex", "Yury"],
     max_speed=20,                           # see the --max-speed caveat below
     title="Race 1",
-    start_time=dt.datetime.fromisoformat("2024-07-24T18:10:00+02:00"),
-    end_time=dt.datetime.fromisoformat("2024-07-24T18:30:00+02:00"),
+    start_time=dt.datetime.fromisoformat("2024-06-15T17:00:00+02:00"),
+    end_time=dt.datetime.fromisoformat("2024-06-15T17:30:00+02:00"),
     tail_length="normal",
 )
 out = "/tmp/race1.html"
@@ -400,7 +412,7 @@ print(out)
 
 | Entry point | Kind | Inputs | Produces |
 | --- | --- | --- | --- |
-| `gpx-player FILES...` | CLI | positional GPX paths | `<slug(title)>.mp4` or `.gif` in the CWD |
+| `python -m gpx_player.main FILES...` | CLI | positional GPX paths | `<slug(title)>.mp4` or `.gif` in the CWD |
 | `python -m gpx_player.openseamap --files FILES...` | CLI | `--files` is required | `boat_tracks.html` in the CWD (always this name) |
 | `gpx-validate FILE` | CLI | one GPX path | exit `0` valid / `1` invalid |
 | `python -m gpx_player.clean_gpx FILE` | CLI | one GPX path | `FILE_noext.gpx`, or in place with `--overwrite` |
@@ -422,8 +434,13 @@ print(out)
   warning; if *all* tracks are empty the map CLI prints a message and writes
   nothing. Check that the output file exists rather than assuming it does.
 * **Headless rendering.** Video mode uses matplotlib; set `MPLBACKEND=Agg` in
-  the environment. MP4 output additionally needs `ffmpeg` on `PATH`, GIF output
-  does not.
+  the environment. MP4 output additionally needs `ffmpeg` on `PATH`; without it
+  matplotlib silently falls back to Pillow. GIF output does not need `ffmpeg`.
+* **The `gpx-player` command exits `1` even on success.** Its entry point is
+  broken (see the known issue under [Video mode](#video-mode)), so exit status
+  is not a usable success signal there. Call
+  `python -m gpx_player.main ...` instead, and in either case verify that the
+  expected output file exists rather than trusting the return code.
 * **Blocked map tiles.** A generated HTML opened over `file://` may show
   "blocked" tiles. Serve it over HTTP, see
   [OpenStreetMap tile access](#openstreetmap-tile-access).
