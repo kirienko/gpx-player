@@ -2,67 +2,194 @@
 [![CI](https://github.com/kirienko/gpx-player/actions/workflows/codecov.yml/badge.svg)](https://github.com/kirienko/gpx-player/actions/workflows/codecov.yml)
 [![codecov](https://codecov.io/gh/kirienko/gpx-player/branch/main/graph/badge.svg)](https://codecov.io/gh/kirienko/gpx-player)
 [![PyPI version](https://img.shields.io/pypi/v/gpx-player)](https://pypi.org/project/gpx-player/)
+[![Python versions](https://img.shields.io/pypi/pyversions/gpx-player)](https://pypi.org/project/gpx-player/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/gpx-player)](https://pypi.org/project/gpx-player/)
 [![License](https://img.shields.io/github/license/kirienko/gpx-player)](LICENSE)
 
 ## GPX Race Visualizer
 
-GPX Race Visualizer is a Python script to visualize the progression of multiple GPS tracks (e.g., from a race) on a 2D map. 
-It takes as input one or more GPX files and creates an animation showing the movement of each track over time. 
+`gpx-player` is a Python package (with two command-line tools and a small public API)
+that visualises the progression of one or more GPS tracks, for example from a race, on a 2D map.
+It takes one or more GPX files and produces either a rendered animation or an
+interactive HTML map that you can play back in a browser.
 This is a simple, open-source alternative to features like Strava's Flyby, which require an account and can have privacy issues.
 
+See [CHANGELOG.md](CHANGELOG.md) for the release history.
+
 ### Modes
-The player supports two modes:
-#### 1. "Video" mode
-Produce an `MP4` or a `GIF` file showing how the situation developed.
+
+The player supports two modes.
+
+#### 1. "Video" mode (`gpx-player`)
+
+Produces an `MP4` or a `GIF` file showing how the situation developed.
 For sailing races, it also calculates the distance covered after the 'start' signal and the current speed.
+
+The file is written to the current directory and named after `--title`
+(slugified), so `--title "Race 1"` produces `race-1.mp4`. Without a title you get
+`untitled.mp4`. **MP4 output requires `ffmpeg` on your `PATH`.** Without it
+matplotlib falls back to its Pillow writer, which cannot encode MP4, and the run
+dies with `ValueError: unknown file extension: .mp4` after rendering every frame,
+leaving no output file. `--gif` works without `ffmpeg`.
+
 ##### Example:
 ![Example output](example.gif "Example of the script output")
 
-#### 2. Map mode
-Displays the track on OpenSeaMap.
-You can see the full tracks with colour-coded speeds,
-and you can 'play' the tracks and see the markers move around the map. While playing, a legend shows each boat's distance travelled (in nautical miles), current speed (in knots), and average speed in knots.
+#### 2. Map mode (`python -m gpx_player.openseamap`)
 
-#### Example:
-Since GitHub Markdown doesn't allow embedding HTML, 
-you can see an [interactive example](https://kirienko.github.io/static/GinSul-2024.html) here.
+Writes a self-contained, playable HTML page on top of OpenStreetMap with an
+OpenSeaMap seamark overlay. The page shows:
 
-Screenshot:
-[![OPS Example](./example_osm.png)](https://kirienko.github.io/static/GinSul-2024.html)
+* the full track of every participant, colour-coded by speed;
+* a play/pause button and a time slider to replay the tracks;
+* a directional arrow marker per participant that rotates to the current heading;
+* a moving tail behind each marker, drawn as a dark outline with a speed-coloured core, with a configurable length;
+* a speed legend, and a live legend with each boat's distance travelled (nautical miles), current speed (knots) and average speed (knots);
+* a per-participant visibility control (top-right) to switch each track between
+  the full speed-coloured track, the moving tail only, or off.
+
+Displayed speeds are smoothed over a short trailing time window (10 s), which
+removes the "zero, then jump" artefacts typical of noisy GPS samples while
+still showing genuine stationary periods.
+
+##### Example:
+
+### ▶ [Open the live interactive demo](https://kirienko.github.io/gpx-player/)
+
+GitHub sanitises Markdown and strips `<script>` and `<iframe>`, so a live
+playable map cannot be embedded in this page. The screenshot below links to the
+hosted, fully interactive version:
+
+[![OpenSeaMap example](./example_osm.png)](https://kirienko.github.io/gpx-player/)
+
+The demo is built from the GPX files in [`example-data/`](example-data) by
+[`scripts/build_demo.py`](scripts/build_demo.py) and redeployed by the
+[Pages workflow](.github/workflows/pages.yml) on every push to `main`, so it
+always reflects the current code. Build it yourself with:
+
+```bash
+python scripts/build_demo.py --output-dir site
+python -m http.server -d site 8000    # then open http://localhost:8000
+```
+
 ## Installation
 
-Install directly from PyPI using pip:
+Requires Python 3.9 or newer.
+
+Install from PyPI:
 ```bash
 pip install gpx-player
 ```
 
-Alternatively, clone the repository and install the required dependencies manually:
+To work on the code, clone the repository and install it in editable mode.
+This installs the runtime dependencies declared in `pyproject.toml`;
+`requirements.txt` additionally pins the test tooling used by CI:
 ```bash
 git clone https://github.com/kirienko/gpx-player.git
 cd gpx-player
-pip install -r requirements.txt
+pip install -e .
+pip install -r requirements.txt   # optional: adds pytest / pytest-cov
+pytest
 ```
 
 ## Usage
-To run the script producing `mp4`, pass one or more GPX file paths as command-line arguments:
+
+### Video mode
+
+Pass one or more GPX file paths as positional arguments:
 ```bash
-gpx-player example-data/track1.gpx example-data/track2.gpx
+python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
 ```
-To get a sea map, run the module:
+
+> **Known issue.** `gpx_player/main.py` has no `main()` function (the whole
+> script runs at import time), but `pyproject.toml` declares the entry point as
+> `gpx_player.main:main`. The `gpx-player` command therefore renders the file
+> correctly and *then* fails with `ImportError: cannot import name 'main'`,
+> exiting with status `1` ([#21](https://github.com/kirienko/gpx-player/issues/21)).
+> Until that is fixed, prefer the module form, which behaves identically and
+> exits `0`. The examples below use it for that reason:
+>
+> ```bash
+> python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
+> ```
+
+A more sophisticated example, which produced the video above:
+```bash
+python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
+       --start 2023-07-01T10:53:00+0000 \
+       --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
+       --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
+       --race_start 2023-07-01T10:58:00+0000 --marks example-data/marks.txt -g
+```
+
+#### Video mode options
+
+| Option | Description |
+| --- | --- |
+| `files` (positional) | One or more GPX files to process. |
+| `--title`, `-t` | Title of the video. Also determines the output filename. |
+| `--start`, `-s` | Start time, all points *before* it are dropped. |
+| `--end`, `-e` | End time, all points *after* it are dropped. |
+| `--race_start`, `-r` | Race start time, used for the "distance since the start signal" readout. |
+| `--names`, `-n` | Names of the participants (file names are used in the legend otherwise). |
+| `--marks`, `-m` | File with static marks to put onto the map, one coordinate pair per line, see [Marks](#marks). |
+| `--gif`, `-g` | Save as an animated GIF instead of MP4. |
+| `--timezone`, `-tz` | Local timezone for displayed timestamps, e.g. `America/Los_Angeles`, see the [tz database list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (default: `Europe/Berlin`). |
+
+In video mode `--start`, `--end` and `--race_start` are parsed strictly as
+`%Y-%m-%dT%H:%M:%S%z`, e.g. `2023-06-30T12:53:00+0200`. The UTC offset is
+mandatory and `Z` is *not* accepted here.
+
+### Map mode
+
+Note that in map mode the GPX files are passed via the **required** `--files`
+option, not as positional arguments:
 ```bash
 python -m gpx_player.openseamap --title 'Gin Sul Regatta 2024' --names Alex Yury Richard \
      --files example-data/osm-demo-Alex.gpx example-data/osm-demo-Richard.gpx \
              example-data/osm-demo-Yury.gpx
 ```
-This writes a static playable HTML map to `boat_tracks.html` with the title,
-speed legend, boat stats legend, play/pause button, moving markers, and time
-slider.
-Playback maps also include a per-boat track visibility control. Each boat can
-show the full speed-coloured track, show only a moving tail in the boat colour,
-or hide both the track and marker.
 
-The same playable OpenSeaMap can be created from Python code:
+This always writes the map to `boat_tracks.html` in the current directory,
+overwriting any existing file of that name.
+
+Restrict the map to a specific time window with `--start` / `--end`. Speed,
+distance, map bounds and the animation slider all reflect only the filtered
+segment:
+```bash
+python -m gpx_player.openseamap --files example-data/osm-demo-Alex.gpx \
+     --start 2024-06-15T17:00:00+0200 --end 2024-06-15T17:30:00+0200
+```
+
+#### Map mode options
+
+| Option | Description |
+| --- | --- |
+| `--files` (required) | One or more GPX files to process. |
+| `--names`, `-n` | Names of the participants (track names, or `Track N`, are used otherwise). |
+| `--title`, `-t` | Title of the page. Also becomes the HTML document title. |
+| `--start`, `-s` | Only render points at or after this time. |
+| `--end`, `-e` | Only render points at or before this time. |
+| `--max-speed`, `-ms` | Plausibility cut-off in knots (default: `12`), see the note below. |
+| `--tail-length` | Length of the moving tail: `short` (30 points), `normal` (60, default) or `long` (120). |
+
+Map mode accepts any ISO 8601 timestamp with a timezone, so
+`2024-06-15T17:00:00+0200`, `2024-06-15T17:00:00+02:00` and
+`2024-06-15T15:00:00Z` are all valid. This is more permissive than video mode.
+
+Video-mode options that do **not** exist in map mode: `--race_start`,
+`--marks`, `--gif` and `--timezone`. Map-mode timestamps are shown in UTC.
+
+> **About `--max-speed`.** It is a dirty-data filter, not a display cap: any
+> segment whose computed speed exceeds it is treated as a GPS glitch and
+> recorded as `0` knots. The colour scale is then rescaled to the highest speed
+> that actually survived the filter. Set it above the fastest speed you expect,
+> otherwise your quickest segments will silently be flattened to zero.
+
+### Python API
+
+The same playable OpenSeaMap can be created from Python:
+
 ```python
 from gpx_player.openseamap import create_playback_map
 
@@ -82,10 +209,25 @@ folium_map = create_playback_map(
 folium_map.save("boat_tracks.html")
 ```
 
-`slider_active_color` and `slider_inactive_color` are optional Python-only
-arguments for theming the played and unplayed sections of the playback slider.
-`tail_length` controls the point-based tail length in map playback mode:
-`short` keeps 30 points, `normal` keeps 60 points, and `long` keeps 120 points.
+`create_playback_map(gpx_files, names=None, *, max_speed=12, title=None,
+start_time=None, end_time=None, slider_active_color="#6e6e6e",
+slider_inactive_color="#d0d0d0", tail_length="normal")` returns a `folium.Map`, so
+you can add your own layers before saving, or render it into an existing page.
+`start_time` / `end_time` are timezone-aware `datetime` objects and are the
+programmatic equivalent of `--start` / `--end`.
+`slider_active_color` and `slider_inactive_color` are Python-only arguments for
+theming the played and unplayed sections of the playback slider; they default to
+the built-in greys shown above, and passing `None` selects those same defaults.
+
+Lower-level building blocks are public too:
+
+| Function | Purpose |
+| --- | --- |
+| `openseamap.create_map(files, names, max_speed, ...)` | Build the base map and parsed track data without any playback UI. |
+| `openseamap.add_playback_controls(folium_map, all_tracks, ...)` | Attach the playback UI, legends and data to a map you already have. |
+| `gpx_utils.trim_track(track, start, end)` / `trim_tracks(...)` | Trim already-parsed tracks to a time window without mutating the input. |
+| `gpx_utils.remove_extensions_tags(path, overwrite=False)` | Strip `<extensions>` blocks from a GPX file. |
+| `validator.validate_gpx(path, strict=False)` | Validate a GPX file, see [GPX Validation](#gpx-validation). |
 
 Playback templates and JavaScript are bundled as package assets, so downstream
 applications can call this API from any current working directory after
@@ -117,38 +259,11 @@ For public or production applications, do not rely on the community
 on a normal web origin and use a tile provider, self-hosted tiles, or vector
 tiles whose terms fit your traffic and offline/static distribution needs.
 
-Restrict the map to a specific time window with `--start` / `--end` (same
-format as in video mode). Speed, distance, map bounds and the animation
-slider all reflect only the filtered segment:
-```bash
-python -m gpx_player.openseamap --files example-data/osm-demo-Alex.gpx \
-     --start 2024-07-24T18:10:00+0200 --end 2024-07-24T18:30:00+0200
-```
-Use `--tail-length short|normal|long` to control the moving tail length in the
-map track visibility control.
-
-A more sophisticated example, that produced a video above:
-```bash
-gpx-player example-data/track1.gpx example-data/track2.gpx example-data/track3.gpx \
-       --start 2023-07-01T10:53:00+0000 \
-       --names "Mr. Pommeroy" "Miss Sophie" "Sir Toby²" \
-       --title "Elbe-Damm Regatta (01.07.2023), Race 1" \
-       --race_start 2023-07-01T10:58:00+0000 --marks example-data/marks.txt -g
-```
-### Additional parameters:
-* `--title` or `-t`: The title of the video
-* `--start` or `-s`: start time in the format `2023-06-30T12:53:00+0200`, all points _before_ that will not be plotted
-* `--end` or `-e`: end time in the format `2023-06-30T13:53:00+0200`, all points _after_ that will not be plotted
-* `--names` or `-n`: names of the participants (otherwise the file names will be used in the legend)
-* `--race_start`, `-r`: Race start time in the format `YYYY-MM-DDTHH:MM:SS%z`, e.g. `2023-07-01T12:29:00+0200`
-* `--names` or `-n`: Names of the participants
-* `--marks`or`-m`: The file with the static marks to put onto the map. One pair of coordinates per line, see below.
-* `--gif` or `-g`: Save as GIF moving picture instead of MP4
-* `--timezone` or `-tz`: Local timezone to use for processing timestamps, e.g. `America/Los_Angeles`, see [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (default: `Europe/Berlin`).
-
 ## Marks
-The script also supports visualizing predefined marks on the map, which can be useful for events like sailing regattas.
-The marks are defined as a list of (latitude, longitude) tuples in a separate text file and can be added to the script as follows:
+
+Video mode also supports visualising predefined marks on the map, which is useful
+for events like sailing regattas. The marks are given as one `latitude, longitude`
+pair per line in a plain text file, passed via `--marks`:
 ```
 53.542484632728, 9.801163896918299
 53.542997846049374, 9.80611324310303
@@ -159,25 +274,36 @@ The marks are defined as a list of (latitude, longitude) tuples in a separate te
 
 ## Getting GPX Files
 
-GPX files can be obtained from several GPS-tracking services:
-* Strava: Go to the activity page and click on the wrench icon. Then select "Export GPX".
-* Garmin Connect: Open the activity, go to the gear icon and select "Export to GPX".
-* Endomondo: From the workout page, click the three-dot menu icon and select "Export". Then choose "GPX".
+Most GPS-tracking services can export GPX. The exact menu wording changes over
+time, so treat the following as a hint rather than a click-by-click recipe:
+
+* **Strava**: open the activity, use the "..." (more options) menu and choose "Export GPX".
+* **Garmin Connect**: open the activity, use the gear / "..." menu and choose "Export to GPX".
+* **Komoot**: open the tour and choose "Export GPX" (a free account is enough for your own tours).
+* **Wikiloc**, **Suunto App**, **Polar Flow**, **COROS**: all offer a per-activity GPX export from the activity page.
+* **Apple Health / Fitness**: no direct GPX export; use a third-party app or the full Health data export.
+
+(Endomondo, previously listed here, was shut down at the end of 2020.)
 
 ## GPX Validation
 
-For the `gpx-player` to work properly, it needs the correct GPX files.
-You can verify that you are inputting the correct file by using the special validator 
-included in this package.
+For `gpx-player` to work properly, it needs correct GPX files.
+You can check a file with the validator included in this package.
 
-The `validator.py` script is a command-line utility and module for validating GPX files. 
-It checks for XML schema conformance and timestamp consistency, 
-supporting both strict and lenient modes. 
-Errors are raised as `GPXValidationError` which can be caught in Python code. 
-To run as a CLI tool, use:
+`gpx_player.validator` is a command-line utility and a module. It checks XML
+schema conformance (against the bundled GPX 1.0 / 1.1 XSDs), coordinate and
+elevation ranges, and timestamp consistency, in either strict or lenient mode.
+As a CLI tool:
 ```bash
 gpx-validate path/to/yourfile.gpx --strict
 ```
+It exits with `0` if the file is valid and `1` otherwise, printing the reason to
+stderr.
+
+`--strict` is optional. In most cases you do not need it, because files that
+strictly correspond to the GPX schema are rare. For example, almost all modern
+files contain coordinates, elevations and timestamps with more decimal places
+than originally planned.
 
 ### Use as a Python module
 
@@ -191,16 +317,16 @@ except GPXValidationError as e:
     print("GPX validation failed:", e)
 ```
 
-The `--strict` parameter is optional. In most cases you do not need it, 
-because files that strictly correspond to the GPX schema are rare. 
-For example, almost all modern files contain coordinates, elevations and time stamps 
-with more decimal places than originally planned.
+> **Caveat.** Most failures raise `GPXValidationError`, but a missing or
+> unsupported `version` attribute on the root `<gpx>` element currently calls
+> `sys.exit(1)` instead of raising. If you embed the validator in a long-running
+> process, guard against `SystemExit` as well.
 
-Also, to better understand your GPX file, you can use the `gpxinfo` console command 
+Also, to better understand your GPX file, you can use the `gpxinfo` console command
 that comes with `gpxpy`. If you are already using the player, you have it:
 
 ```bash
-$ gpxinfo example-data/osm_track1.gpx 
+$ gpxinfo example-data/osm_track1.gpx
 File: example-data/osm_track1.gpx
     Waypoints: 0
     Routes: 0
@@ -221,14 +347,11 @@ File: example-data/osm_track1.gpx
 
 ## GPX Cleanup
 
-For convenience, the repository provides `clean_gpx.py`. This utility first
-validates a GPX file using `validator.py` and then removes all `<extensions>`
-blocks using :func:`remove_extensions_tags` from `gpx_utils`. By default the
+For convenience, the package provides `gpx_player.clean_gpx`. This utility first
+validates a GPX file using the validator and then removes all `<extensions>`
+blocks using `remove_extensions_tags` from `gpx_player.gpx_utils`. By default the
 cleaned file is saved alongside the original with `_noext` appended to its name.
-If the optional `--overwrite` flag is used, the original file is modified in
-place.
-
-Run it from the command line as follows:
+With the optional `--overwrite` flag the original file is modified in place.
 
 ```bash
 python -m gpx_player.clean_gpx path/to/yourfile.gpx [--overwrite]
@@ -236,6 +359,123 @@ python -m gpx_player.clean_gpx path/to/yourfile.gpx [--overwrite]
 
 If validation fails, the command exits with an error message. The output reports
 how many extension blocks were removed.
+
+## For AI agents
+
+This section is a compact contract for LLM agents and automated pipelines that
+drive `gpx-player`. Humans can skip it.
+
+**What this package does:** turns GPX track files into either a rendered
+animation (MP4/GIF) or a single-file interactive HTML map. Generation itself is
+offline and deterministic: the track data is inlined into the page and nothing
+is uploaded.
+
+The generated page is *not* self-contained at view time. Folium references
+Leaflet, jQuery and Bootstrap from `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`,
+`code.jquery.com` and `netdna.bootstrapcdn.com`, on top of the map tiles. In a
+browser that cannot reach those hosts the map does not initialise at all, so do
+not treat the output as an offline artifact or promise a viewer it will work
+air-gapped.
+
+### Recommended workflow
+
+1. **Validate first.** Call `validate_gpx(path)` (or `gpx-validate path`) on every
+   input before rendering. Most rendering failures are bad input, and the
+   validator gives a specific reason where the renderer gives a traceback.
+2. **Clean if needed.** `clean_gpx_file(path)` strips vendor `<extensions>`,
+   but it runs `validate_gpx(path, strict=True)` *first* and raises
+   `GPXValidationError` if that fails, so it can only clean files that already
+   validate. To strip extensions from a file that does **not** validate, call
+   `gpx_utils.remove_extensions_tags(path)` directly, which does no validation.
+3. **Render via the Python API, not the CLI.** `create_playback_map()` returns a
+   `folium.Map`, so you choose the output path. The map-mode CLI always writes
+   `boat_tracks.html` into the current working directory and overwrites it,
+   which makes concurrent or repeated runs collide.
+4. **Report the artifact path** you saved to, not "the file was created".
+
+### Minimal end-to-end recipe
+
+```python
+import datetime as dt
+from gpx_player.validator import validate_gpx, GPXValidationError
+from gpx_player.openseamap import create_playback_map
+
+files = ["example-data/osm-demo-Alex.gpx", "example-data/osm-demo-Yury.gpx"]
+
+for f in files:
+    try:
+        validate_gpx(f)                     # lenient mode; strict=True is usually too strict
+    except (GPXValidationError, SystemExit) as e:
+        raise SystemExit(f"unusable input {f}: {e}")
+
+folium_map = create_playback_map(
+    files,
+    names=["Alex", "Yury"],
+    max_speed=20,                           # see the --max-speed caveat below
+    title="Race 1",
+    start_time=dt.datetime.fromisoformat("2024-06-15T17:00:00+02:00"),
+    end_time=dt.datetime.fromisoformat("2024-06-15T17:30:00+02:00"),
+    tail_length="normal",
+)
+out = "/tmp/race1.html"
+folium_map.save(out)
+print(out)
+```
+
+### Interface summary
+
+| Entry point | Kind | Inputs | Produces |
+| --- | --- | --- | --- |
+| `python -m gpx_player.main FILES...` | CLI | positional GPX paths | `<slug(title)>.mp4` or `.gif` in the CWD |
+| `python -m gpx_player.openseamap --files FILES...` | CLI | `--files` is required | `boat_tracks.html` in the CWD (always this name) |
+| `gpx-validate FILE` | CLI | one GPX path | exit `0` valid / `1` invalid |
+| `python -m gpx_player.clean_gpx FILE` | CLI | one GPX path | `FILE_noext.gpx`, or in place with `--overwrite` |
+| `openseamap.create_playback_map(...)` | API | list of paths | `folium.Map`, caller chooses the path |
+| `openseamap.create_map(...)` | API | list of paths | `(folium.Map, tracks, max_speed, map_id)` |
+| `validator.validate_gpx(...)` | API | one path | `True`, or raises `GPXValidationError` (also `SystemExit` on a bad `version`, see below) |
+| `gpx_utils.trim_track(...)` | API | parsed track dict | trimmed copy, input untouched |
+
+### Failure modes to expect
+
+* **Naive timestamps.** Every `--start` / `--end` / `start_time` / `end_time`
+  value must carry a UTC offset. Video mode is strict (`%Y-%m-%dT%H:%M:%S%z`,
+  no `Z`); map mode accepts general ISO 8601, including `Z`.
+* **`max_speed` silently zeroes fast segments.** It is a plausibility filter,
+  not a display cap. The default of `12` knots is tuned for sailing; for
+  cycling, driving or running, raise it, or your fastest segments will be
+  recorded as `0`.
+* **Empty time window.** Tracks with no points in the window are skipped with a
+  warning; if *all* tracks are empty the map CLI prints a message and writes
+  nothing. Check that the output file exists rather than assuming it does.
+* **Headless rendering.** Video mode uses matplotlib; set `MPLBACKEND=Agg` in
+  the environment. MP4 output additionally requires `ffmpeg` on `PATH`: without
+  it the run renders every frame and *then* dies with `ValueError: unknown file
+  extension: .mp4`, writing nothing. Check for `ffmpeg` before choosing MP4, or
+  use `--gif`, which does not need it.
+* **The `gpx-player` command exits `1` even on success.** Its entry point is
+  broken ([#21](https://github.com/kirienko/gpx-player/issues/21), see the note
+  under [Video mode](#video-mode)), so exit status
+  is not a usable success signal there. Call
+  `python -m gpx_player.main ...` instead, and in either case verify that the
+  expected output file exists rather than trusting the return code.
+* **Blocked map tiles.** A generated HTML opened over `file://` may show
+  "blocked" tiles. Serve it over HTTP, see
+  [OpenStreetMap tile access](#openstreetmap-tile-access).
+* **Blocked CDNs.** If the viewer cannot reach the JS/CSS hosts listed above,
+  the page loads but the map never initialises, and it fails quietly: the static
+  legend still renders, so "the HTML looks fine" is not evidence the map works.
+* **Track-to-name mapping.** Names are matched to tracks in file order, and a
+  single GPX file may contain several `<trk>` elements. If a file has more than
+  one track, supply one name per *track*, not per file.
+
+### Untrusted input
+
+GPX files are XML from arbitrary sources. Track names and descriptions are
+HTML-escaped and playback data is JSON-escaped before being written into the
+generated page, so a hostile track name cannot break out of the HTML or the
+inline script. Still, treat file paths and titles you pass in as data, and do
+not interpolate agent-controlled text into the shell; call the Python API
+instead of building command strings.
 
 ## Support
 Now you can buy me a coffee to encourage further development!

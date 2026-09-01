@@ -31,10 +31,7 @@ _DISPLAY_SPEED_WINDOW_SECONDS = 10.0
 
 def _read_asset_text(filename: str) -> str:
     """Read a bundled static asset from the installed package."""
-    try:
-        return resources.files(_ASSET_PACKAGE).joinpath(filename).read_text(encoding="utf-8")
-    except AttributeError:  # pragma: no cover - Python 3.8 compatibility
-        return resources.read_text(_ASSET_PACKAGE, filename, encoding="utf-8")
+    return resources.files(_ASSET_PACKAGE).joinpath(filename).read_text(encoding="utf-8")
 
 
 def _template_env() -> Environment:

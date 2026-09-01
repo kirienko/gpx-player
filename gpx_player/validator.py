@@ -157,7 +157,7 @@ def validate_gpx(file_path, strict=False):
     # Step 2. Determine GPX version from the root element.
     version = root.get("version")
     if version not in ("1.0", "1.1"):
-        print(f"Unsupported or missing GPX version: {version}")
+        print(f"Unsupported or missing GPX version: {version}", file=sys.stderr)
         sys.exit(1)
 
     # Step 3. Validate against the corresponding GPX XSD.

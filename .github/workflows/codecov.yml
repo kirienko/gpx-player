@@ -10,14 +10,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Lowest supported version (see requires-python) and the newest one, so
+        # that the declared floor stays honest.
+        python-version: ['3.9', '3.13']
+
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/checkout@v4
       with:
-        python-version: '3.x'
+        # No later step needs authenticated Git access.
+        persist-credentials: false
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
       run: |
@@ -30,6 +40,7 @@ jobs:
         pytest --cov=./ --cov-report=xml tests/
 
     - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.13'
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}

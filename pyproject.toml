@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpx-player"
-version = "0.5.1"
+version = "0.5.2"
 description = "Visualise & animate GPX race tracks."
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [{name = "Yury Kirienko"}]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 
 dependencies = [
   "folium",
@@ -25,8 +25,13 @@ dependencies = [
 gpx-player   = "gpx_player.main:main"
 gpx-validate = "gpx_player.validator:main"
 
-[tool.setuptools.packages]
-find = {}
+[tool.setuptools.packages.find]
+# Flat layout: without an explicit exclude, setuptools ships every top-level
+# directory (tests/, scripts/, stale build/) as an importable package.
+# NOTE: "schema" is deliberately NOT excluded. validator.load_schema() resolves
+# the XSDs via Path(__file__).parent.parent / "schema", i.e. site-packages/schema
+# for an installed wheel, so dropping it would break gpx-validate.
+exclude = ["tests*", "scripts*", "build*", "dist*", "example-data*"]
 
 [tool.setuptools]
 include-package-data = true
