@@ -7,3 +7,7 @@ docs/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Locally built demo site (published from CI, see .github/workflows/pages.yml)
+site/
+boat_tracks.html

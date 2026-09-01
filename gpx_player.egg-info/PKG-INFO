@@ -1,3 +1,42 @@
+Metadata-Version: 2.4
+Name: gpx-player
+Version: 0.5.1
+Summary: Visualise & animate GPX race tracks.
+Author: Yury Kirienko
+License: MIT License
+        
+        Copyright (c) 2023 Yury Kirienko
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: folium
+Requires-Dist: jinja2
+Requires-Dist: matplotlib
+Requires-Dist: pytz
+Requires-Dist: lxml
+Requires-Dist: numpy
+Requires-Dist: gpxpy
+Dynamic: license-file
+
 # gpx-player
 [![CI](https://github.com/kirienko/gpx-player/actions/workflows/codecov.yml/badge.svg)](https://github.com/kirienko/gpx-player/actions/workflows/codecov.yml)
 [![codecov](https://codecov.io/gh/kirienko/gpx-player/branch/main/graph/badge.svg)](https://codecov.io/gh/kirienko/gpx-player)
@@ -51,23 +90,13 @@ still showing genuine stationary periods.
 
 ##### Example:
 
-### ▶ [Open the live interactive demo](https://kirienko.github.io/gpx-player/)
-
 GitHub sanitises Markdown and strips `<script>` and `<iframe>`, so a live
-playable map cannot be embedded in this page. The screenshot below links to the
-hosted, fully interactive version:
+playable map cannot be embedded in this page. The screenshot below links to a
+hosted, fully interactive example:
 
-[![OpenSeaMap example](./example_osm.png)](https://kirienko.github.io/gpx-player/)
+[![OpenSeaMap example](./example_osm.png)](https://kirienko.github.io/static/GinSul-2024.html)
 
-The demo is built from the GPX files in [`example-data/`](example-data) by
-[`scripts/build_demo.py`](scripts/build_demo.py) and redeployed by the
-[Pages workflow](.github/workflows/pages.yml) on every push to `main`, so it
-always reflects the current code. Build it yourself with:
-
-```bash
-python scripts/build_demo.py --output-dir site
-python -m http.server -d site 8000    # then open http://localhost:8000
-```
+Open the [interactive example](https://kirienko.github.io/static/GinSul-2024.html) directly.
 
 ## Installation
 
