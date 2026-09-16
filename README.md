@@ -25,9 +25,11 @@ The player supports two modes.
 Produces an `MP4` or a `GIF` file showing how the situation developed.
 For sailing races, it also calculates the distance covered after the 'start' signal and the current speed.
 
-The file is written to the current directory and named after `--title`
-(slugified), so `--title "Race 1"` produces `race-1.mp4`. Without a title you get
-`untitled.mp4`. **MP4 output requires `ffmpeg` on your `PATH`.** Without it
+By default, the file is written to the current directory and named after
+`--title` (slugified), so `--title "Race 1"` produces `race-1.mp4`. Without a
+title you get `untitled.mp4`. Use `--output` / `-o` to choose an explicit path
+(use a `.gif` path with `--gif`, or `.mp4` otherwise). Existing files at that
+path are overwritten. **MP4 output requires `ffmpeg` on your `PATH`.** Without it
 matplotlib falls back to its Pillow writer, which cannot encode MP4, and the run
 dies with `ValueError: unknown file extension: .mp4` after rendering every frame,
 leaving no output file. `--gif` works without `ffmpeg`.
@@ -101,17 +103,10 @@ Pass one or more GPX file paths as positional arguments:
 python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
 ```
 
-> **Known issue.** `gpx_player/main.py` has no `main()` function (the whole
-> script runs at import time), but `pyproject.toml` declares the entry point as
-> `gpx_player.main:main`. The `gpx-player` command therefore renders the file
-> correctly and *then* fails with `ImportError: cannot import name 'main'`,
-> exiting with status `1` ([#21](https://github.com/kirienko/gpx-player/issues/21)).
-> Until that is fixed, prefer the module form, which behaves identically and
-> exits `0`. The examples below use it for that reason:
->
-> ```bash
-> python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx
-> ```
+The `gpx-player` command and `python -m gpx_player.main` are equivalent.
+Both exit `0` after a successful render and non-zero on failure. If any input
+track has no points in the selected window, the command reports the filename
+and fails before rendering.
 
 A more sophisticated example, which produced the video above:
 ```bash
@@ -127,7 +122,8 @@ python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx exampl
 | Option | Description |
 | --- | --- |
 | `files` (positional) | One or more GPX files to process. |
-| `--title`, `-t` | Title of the video. Also determines the output filename. |
+| `--title`, `-t` | Title of the video. Determines the default output filename. |
+| `--output`, `-o` | Explicit output path, overriding the title-based filename. Use `.gif` with `--gif`, or `.mp4` otherwise. |
 | `--start`, `-s` | Start time, all points *before* it are dropped. |
 | `--end`, `-e` | End time, all points *after* it are dropped. |
 | `--race_start`, `-r` | Race start time, used for the "distance since the start signal" readout. |
@@ -426,7 +422,7 @@ print(out)
 
 | Entry point | Kind | Inputs | Produces |
 | --- | --- | --- | --- |
-| `python -m gpx_player.main FILES...` | CLI | positional GPX paths | `<slug(title)>.mp4` or `.gif` in the CWD |
+| `python -m gpx_player.main FILES...` | CLI | positional GPX paths | The `--output` path, otherwise `<slug(title)>.mp4` or `.gif` in the CWD (`untitled` when no title is given) |
 | `python -m gpx_player.openseamap --files FILES...` | CLI | `--files` is required | `boat_tracks.html` in the CWD (always this name) |
 | `gpx-validate FILE` | CLI | one GPX path | exit `0` valid / `1` invalid |
 | `python -m gpx_player.clean_gpx FILE` | CLI | one GPX path | `FILE_noext.gpx`, or in place with `--overwrite` |
@@ -444,7 +440,8 @@ print(out)
   not a display cap. The default of `12` knots is tuned for sailing; for
   cycling, driving or running, raise it, or your fastest segments will be
   recorded as `0`.
-* **Empty time window.** Tracks with no points in the window are skipped with a
+* **Empty time window.** Video mode fails with a non-zero exit status if any
+  input track has no selected points. In map mode, empty tracks are skipped with a
   warning; if *all* tracks are empty the map CLI prints a message and writes
   nothing. Check that the output file exists rather than assuming it does.
 * **Headless rendering.** Video mode uses matplotlib; set `MPLBACKEND=Agg` in
@@ -452,12 +449,6 @@ print(out)
   it the run renders every frame and *then* dies with `ValueError: unknown file
   extension: .mp4`, writing nothing. Check for `ffmpeg` before choosing MP4, or
   use `--gif`, which does not need it.
-* **The `gpx-player` command exits `1` even on success.** Its entry point is
-  broken ([#21](https://github.com/kirienko/gpx-player/issues/21), see the note
-  under [Video mode](#video-mode)), so exit status
-  is not a usable success signal there. Call
-  `python -m gpx_player.main ...` instead, and in either case verify that the
-  expected output file exists rather than trusting the return code.
 * **Blocked map tiles.** A generated HTML opened over `file://` may show
   "blocked" tiles. Serve it over HTTP, see
   [OpenStreetMap tile access](#openstreetmap-tile-access).
