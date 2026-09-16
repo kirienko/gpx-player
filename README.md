@@ -422,7 +422,7 @@ print(out)
 
 | Entry point | Kind | Inputs | Produces |
 | --- | --- | --- | --- |
-| `python -m gpx_player.main FILES...` | CLI | positional GPX paths | `<slug(title)>.mp4` or `.gif` in the CWD |
+| `python -m gpx_player.main FILES...` | CLI | positional GPX paths | The `--output` path, otherwise `<slug(title)>.mp4` or `.gif` in the CWD (`untitled` when no title is given) |
 | `python -m gpx_player.openseamap --files FILES...` | CLI | `--files` is required | `boat_tracks.html` in the CWD (always this name) |
 | `gpx-validate FILE` | CLI | one GPX path | exit `0` valid / `1` invalid |
 | `python -m gpx_player.clean_gpx FILE` | CLI | one GPX path | `FILE_noext.gpx`, or in place with `--overwrite` |
