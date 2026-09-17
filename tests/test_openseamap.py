@@ -1432,6 +1432,20 @@ assert.strictEqual(map.hasLayer(state.trackMarkers[0]), true);
 
 def test_wheel_includes_playback_assets(tmp_path):
     project_root = Path(__file__).resolve().parents[1]
+    src = tmp_path / "src"
+    src.mkdir()
+    # Stage packaging inputs, including directories that discovery must exclude.
+    # Avoid copying local environments, downloads, and generated output.
+    for name in ("pyproject.toml", "MANIFEST.in", "README.md", "LICENSE"):
+        shutil.copy2(project_root / name, src / name)
+    for name in ("gpx_player", "schema", "tests", "scripts"):
+        shutil.copytree(
+            project_root / name,
+            src / name,
+            ignore=shutil.ignore_patterns(
+                "build", "dist", "*.egg-info", "__pycache__", "*.pyc", ".pytest_cache",
+            ),
+        )
     dist_dir = tmp_path / "dist"
 
     result = subprocess.run(
@@ -1440,9 +1454,8 @@ def test_wheel_includes_playback_assets(tmp_path):
             "-m",
             "pip",
             "wheel",
-            str(project_root),
+            str(src),
             "--no-deps",
-            "--no-build-isolation",
             "-w",
             str(dist_dir),
         ],
@@ -1464,6 +1477,11 @@ def test_wheel_includes_playback_assets(tmp_path):
         "gpx_player/assets/header_template.html",
     }
     assert expected_assets <= wheel_files
+    # Schemas are intentionally installed alongside gpx_player for gpx-validate.
+    distribution, version = wheel.name.split("-")[:2]
+    assert {name.split("/", 1)[0] for name in wheel_files} == {
+        "gpx_player", "schema", f"{distribution}-{version}.dist-info",
+    }
 
 
 def test_create_map_with_time_window():
