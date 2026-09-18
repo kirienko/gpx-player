@@ -60,8 +60,13 @@ class _SafeTooltip(folium.Tooltip):
     _template = Template(
         """
         {% macro script(this, kwargs) %}
+            {% set opening_tag = '<div' %}
+            {% if this.style %}
+                {% set opening_tag = opening_tag ~ ' style="' ~ this.style|e ~ '"' %}
+            {% endif %}
+            {% set opening_tag = opening_tag ~ '>' %}
             {{ this._parent.get_name() }}.bindTooltip(
-                `<div{% if this.style %} style={{ this.style|tojson }}{% endif %}>` +
+                {{ opening_tag|tojson }} +
                     {{ this.text|tojson }} + `</div>`,
                 {{ this.options|tojavascript }}
             );

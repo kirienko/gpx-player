@@ -1,11 +1,13 @@
 import datetime as dt
 import importlib
+import json
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
+from html import escape as html_escape
 from pathlib import Path
 
 import pytest
@@ -302,7 +304,33 @@ def test_safe_tooltip_preserves_folium_style_option():
 
     rendered = folium_map.get_root().render()
 
-    assert 'style="color: red;"' in rendered
+    tooltip_script = rendered.split('.bindTooltip(', 1)[1]
+    opening_tag_literal = tooltip_script.lstrip().splitlines()[0].removesuffix(' +')
+
+    assert json.loads(opening_tag_literal) == '<div style="color: red;">'
+
+
+def test_safe_tooltip_serializes_hostile_style_outside_template_literal():
+    hostile_style = (
+        '${document.title=7*7}`; document.title="style-pwned"; '
+        '</script><script>alert(1)</script>'
+    )
+    folium_map = folium.Map(location=[0, 0])
+    folium.PolyLine(
+        [(0, 0), (1, 1)],
+        tooltip=_SafeTooltip('Styled', style=hostile_style),
+    ).add_to(folium_map)
+
+    rendered = folium_map.get_root().render()
+    tooltip_script = rendered.split('.bindTooltip(', 1)[1]
+    opening_tag_literal = tooltip_script.lstrip().splitlines()[0].removesuffix(' +')
+
+    assert opening_tag_literal.startswith('"')
+    expected_style = html_escape(hostile_style, quote=True).replace('&quot;', '&#34;')
+    assert json.loads(opening_tag_literal) == (
+        '<div style="' + expected_style + '">'
+    )
+    assert '`<div style=' not in rendered
 
 
 def test_create_playback_map_renders_multi_track_boat_legend():
