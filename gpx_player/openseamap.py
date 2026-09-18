@@ -12,6 +12,7 @@ import gpxpy.gpx
 import jinja2
 import matplotlib.pyplot as plt
 from jinja2 import Environment, PackageLoader, select_autoescape
+from folium.template import Template
 
 from gpx_player.gpx_utils import trim_track
 from gpx_player.utils import track_serializer
@@ -50,6 +51,22 @@ def _json_for_inline_script(data) -> str:
         .replace(">", "\\u003e")
         .replace("\u2028", "\\u2028")
         .replace("\u2029", "\\u2029")
+    )
+
+
+class _SafeTooltip(folium.Tooltip):
+    """Render tooltip text as a JavaScript string, not a template literal body."""
+
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+            {{ this._parent.get_name() }}.bindTooltip(
+                `<div{% if this.style %} style={{ this.style|tojson }}{% endif %}>` +
+                    {{ this.text|tojson }} + `</div>`,
+                {{ this.options|tojavascript }}
+            );
+        {% endmacro %}
+        """
     )
 
 
@@ -355,7 +372,7 @@ def create_map(
                 color=color,
                 weight=2.5,
                 opacity=1,
-                tooltip=folium.Tooltip(tooltip_content)
+                tooltip=_SafeTooltip(tooltip_content)
             ).add_to(track_layer)
         track_layers.append(track_layer)
         track['track_layer_name'] = track_layer.get_name()
