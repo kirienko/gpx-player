@@ -1,13 +1,17 @@
 import datetime as dt
 import importlib
+import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
+from html import escape as html_escape
 from pathlib import Path
 
 import pytest
+import folium
 
 import gpxpy.geo
 
@@ -21,6 +25,7 @@ from gpx_player.openseamap import (
     create_playback_map,
     parse_gpx,
     speed_to_color,
+    _SafeTooltip,
     _parse_iso_datetime,
 )
 
@@ -254,6 +259,78 @@ def test_create_playback_map_renders_from_arbitrary_cwd(tmp_path, monkeypatch):
     assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in rendered
     assert "&lt;/script&gt;&lt;script&gt;alert(2)&lt;/script&gt;" in rendered
     assert 'document.querySelector("button")' not in rendered
+
+
+def test_create_map_serializes_tooltip_names_outside_template_literals():
+    path, _t0 = _write_sample_gpx(
+        n_points=4,
+        track_name="GPX ${document.title=7*7}",
+    )
+    override_name = 'Override ${document.title=7*7} ` \\ " </script> & < > Ω'
+
+    folium_map, _all_tracks, _max_speed, _map_id = create_map(
+        [path], names=[override_name], max_speed=12.0,
+    )
+    rendered = folium_map.get_root().render()
+
+    assert not re.search(r"bindTooltip\(\s*`<div>[^`]*\$\{", rendered)
+    assert '"Name: Override ${document.title=7*7} ' in rendered
+    assert "\\u003cbr\\u003e" in rendered
+    assert "\\u0026lt;/script\\u0026gt;" in rendered
+
+
+def test_create_map_serializes_gpx_track_names_outside_template_literals():
+    path, _t0 = _write_sample_gpx(
+        n_points=4,
+        track_name="GPX ${document.title=7*7}",
+    )
+
+    folium_map, _all_tracks, _max_speed, _map_id = create_map(
+        [path], names=None, max_speed=12.0,
+    )
+    rendered = folium_map.get_root().render()
+
+    assert not re.search(r"bindTooltip\(\s*`<div>[^`]*\$\{", rendered)
+    assert '"Name: GPX ${document.title=7*7}\\u003cbr\\u003e' in rendered
+    assert "\\u003cbr\\u003e" in rendered
+
+
+def test_safe_tooltip_preserves_folium_style_option():
+    folium_map = folium.Map(location=[0, 0])
+    folium.PolyLine(
+        [(0, 0), (1, 1)],
+        tooltip=_SafeTooltip("Styled", style="color: red;"),
+    ).add_to(folium_map)
+
+    rendered = folium_map.get_root().render()
+
+    tooltip_script = rendered.split('.bindTooltip(', 1)[1]
+    opening_tag_literal = tooltip_script.lstrip().splitlines()[0].removesuffix(' +')
+
+    assert json.loads(opening_tag_literal) == '<div style="color: red;">'
+
+
+def test_safe_tooltip_serializes_hostile_style_outside_template_literal():
+    hostile_style = (
+        '${document.title=7*7}`; document.title="style-pwned"; '
+        '</script><script>alert(1)</script>'
+    )
+    folium_map = folium.Map(location=[0, 0])
+    folium.PolyLine(
+        [(0, 0), (1, 1)],
+        tooltip=_SafeTooltip('Styled', style=hostile_style),
+    ).add_to(folium_map)
+
+    rendered = folium_map.get_root().render()
+    tooltip_script = rendered.split('.bindTooltip(', 1)[1]
+    opening_tag_literal = tooltip_script.lstrip().splitlines()[0].removesuffix(' +')
+
+    assert opening_tag_literal.startswith('"')
+    expected_style = html_escape(hostile_style, quote=True).replace('&quot;', '&#34;')
+    assert json.loads(opening_tag_literal) == (
+        '<div style="' + expected_style + '">'
+    )
+    assert '`<div style=' not in rendered
 
 
 def test_create_playback_map_renders_multi_track_boat_legend():
