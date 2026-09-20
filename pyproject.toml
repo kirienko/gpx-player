@@ -12,7 +12,7 @@ authors = [{name = "Yury Kirienko"}]
 requires-python = ">=3.9"
 
 dependencies = [
-  "folium",
+  "folium>=0.17.0",
   "jinja2",
   "matplotlib",
   "pytz",

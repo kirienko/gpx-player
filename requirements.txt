@@ -1,5 +1,5 @@
 gpxpy
-folium
+folium>=0.17.0
 jinja2
 lxml
 matplotlib
