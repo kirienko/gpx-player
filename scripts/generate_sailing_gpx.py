@@ -18,6 +18,7 @@ import math
 import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 KNOT = 0.514444  # m/s
 EARTH_M_PER_DEG = 111_320.0
@@ -188,17 +189,25 @@ def to_trackpoints(rng, samples, lat0, lon0, start):
     return points
 
 
+def positive_finite(value):
+    """argparse type for a positive, finite float."""
+    value = float(value)
+    if not math.isfinite(value) or value <= 0:
+        raise argparse.ArgumentTypeError("must be a positive finite number")
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--lat", type=float, default=36.406762, help="start latitude")
     parser.add_argument("--lon", type=float, default=30.486631, help="start longitude")
     parser.add_argument("--start", default=None,
                         help="ISO start time with offset (default: today 14:12 UTC+3)")
-    parser.add_argument("--duration", type=float, default=60.0,
+    parser.add_argument("--duration", type=positive_finite, default=60.0,
                         help="approximate duration in minutes (default: 60)")
     parser.add_argument("--wind-from", type=float, default=120.0,
                         help="true wind direction in degrees (default: 120, sea breeze)")
-    parser.add_argument("--max-speed", type=float, default=5.4,
+    parser.add_argument("--max-speed", type=positive_finite, default=5.4,
                         help="boat speed cap in knots (default: 5.4)")
     parser.add_argument("--name", default="Çıralı Afternoon Sail")
     parser.add_argument("--seed", type=int, default=42)
@@ -223,7 +232,7 @@ def main():
                             args.lat, args.lon, start)
 
     with args.output.open("w", encoding="utf-8") as f:
-        f.write(GPX_HEADER.format(time=points[0]["time"], name=args.name))
+        f.write(GPX_HEADER.format(time=points[0]["time"], name=escape(args.name)))
         for p in points:
             f.write(GPX_POINT.format(**p))
         f.write(GPX_FOOTER)
