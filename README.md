@@ -74,6 +74,20 @@ python scripts/build_demo.py --output-dir site
 python -m http.server -d site 8000    # then open http://localhost:8000
 ```
 
+### Synthetic sailing tracks
+
+[`scripts/generate_sailing_gpx.py`](scripts/generate_sailing_gpx.py) generates
+a Strava-style sailing GPX (a beat, a reach and a broad reach home, below
+6 knots) around any start point, for testing without real recordings.
+[`example-data/synthetic-sail-cirali.gpx`](example-data/synthetic-sail-cirali.gpx)
+is a one-hour sail off Çıralı, Turkey, made with:
+
+```bash
+python scripts/generate_sailing_gpx.py --lat 36.406762 --lon 30.486631 \
+    --start 2026-09-22T14:12:07+03:00 --output example-data/synthetic-sail-cirali.gpx
+python -m gpx_player.openseamap --files example-data/synthetic-sail-cirali.gpx
+```
+
 ## Installation
 
 Requires Python 3.9 or newer.
