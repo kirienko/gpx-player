@@ -11,7 +11,10 @@ def cut_gpx_file(file_path, timestamp, cut_type):
     Cut a GPX file by timestamp and write the result beside the source.
 
     :param file_path: Path to the original GPX file.
-    :param timestamp: Timezone-aware datetime or ISO 8601 string with a timezone.
+    :param timestamp: Timezone-aware datetime or a string in the calendar-date form
+        accepted by datetime.fromisoformat on Python 3.9 and 3.10. A timezone
+        offset is required; a trailing 'Z' denotes UTC. Other ISO 8601 forms are
+        not supported by that parser.
     :param cut_type: 'start' to keep timestamps at or after the cut, or 'end' to
         keep timestamps at or before it.
     :return: Path to the new GPX file. Existing output paths raise FileExistsError.
