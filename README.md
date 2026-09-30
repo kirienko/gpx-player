@@ -378,6 +378,9 @@ air-gapped.
 1. **Validate first.** Call `validate_gpx(path)` (or `gpx-validate path`) on every
    input before rendering. Most rendering failures are bad input, and the
    validator gives a specific reason where the renderer gives a traceback.
+   Missing `<time>` elements can still be schema-valid; time-based renderers
+   require a timezone-aware timestamp for every track point and report the
+   source file, track, and point when that readiness check fails.
 2. **Clean if needed.** `clean_gpx_file(path)` strips vendor `<extensions>`,
    but it runs `validate_gpx(path, strict=True)` *first* and raises
    `GPXValidationError` if that fails, so it can only clean files that already

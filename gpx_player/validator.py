@@ -1,8 +1,9 @@
 import argparse
 import sys
-from datetime import datetime as dt
 
 from lxml import etree
+
+from gpx_player.timestamps import GPXTimestampError, normalize_timestamp_sequence, parse_iso_datetime
 
 class GPXValidationError(Exception):
     """Exception raised for GPX validation errors."""
@@ -18,17 +19,8 @@ def parse_gpx(file_path):
 
 
 def parse_timestamp(timestamp_str):
-    """
-    A helper function that tolerates both `2024-06-15T14:46:21.000Z` and `2024-06-15T14:46:21Z` time formats,
-    i.e. both integer and decimal seconds.
-    """
-    formats = ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"]
-    for fmt in formats:
-        try:
-            return dt.strptime(timestamp_str, fmt)
-        except ValueError:
-            continue
-    raise ValueError(f"Timestamp '{timestamp_str}' does not match any expected format.")
+    """Parse a timezone-aware ISO timestamp and normalize it to UTC."""
+    return parse_iso_datetime(timestamp_str)
 
 
 def load_schema(version):
@@ -114,38 +106,31 @@ def validate_schema(tree, schema, strict, root=None):
 
 def check_timestamp_consistency(root):
     """
-    For each track that has at least one timestamped point, ensure that:
-      - Timestamps appear in strictly increasing order.
-      - No two distinct points have the same timestamp.
+    Validate every provided timestamp while leaving schema-valid untimed points alone.
     """
     # Using a namespace-agnostic search with {*}
     tracks = root.findall(".//{*}trk")
-    if not tracks:
-        # No tracks in the file.
-        return
-
     # Iterate over each track.
-    for trk in tracks:
-        # List to store timestamps (in order) for the current track.
-        timestamps = []
-        # Process each track segment (trkseg) in the order they appear.
-        for trkseg in trk.findall(".//{*}trkseg"):
-            for trkpt in trkseg.findall("{*}trkpt"):
-                time_elem = trkpt.find("{*}time")
-                if time_elem is not None and time_elem.text:
-                    try:
-                        # GPX timestamps are typically in ISO8601 format ending with 'Z' (UTC).
-                        t = parse_timestamp(time_elem.text)
-                    except ValueError:
-                        print(f"Invalid timestamp format: {time_elem.text}")
-                        sys.exit(1)
-                    # Check for duplicate timestamp (i.e. same time appears more than once in this track)
-                    if t in timestamps:
-                        raise GPXValidationError(f"Duplicate timestamp found in track: {t}")
-                    # If there is a previous timestamp, ensure the current one is later.
-                    if timestamps and t <= timestamps[-1]:
-                        raise GPXValidationError(f"Timestamps not strictly increasing: {t} does not come after {timestamps[-1]}")
-                    timestamps.append(t)
+    for track_index, track in enumerate(tracks, start=1):
+        name_elem = track.find("{*}name")
+        track_name = name_elem.text.strip() if name_elem is not None and name_elem.text else f"track {track_index}"
+        # List the timestamps, in order, for the current track.
+        timestamp_values = []
+        # Process each track segment and its points in the order they appear.
+        for segment in track.findall(".//{*}trkseg"):
+            for point in segment.findall("{*}trkpt"):
+                time_elem = point.find("{*}time")
+                timestamp_values.append(
+                    time_elem.text.strip() if time_elem is not None and time_elem.text else None
+                )
+        try:
+            normalize_timestamp_sequence(
+                timestamp_values,
+                context=f"track '{track_name}'",
+                require_all=False,
+            )
+        except GPXTimestampError as exc:
+            raise GPXValidationError(str(exc)) from exc
 
 
 def validate_gpx(file_path, strict=False):
@@ -157,8 +142,7 @@ def validate_gpx(file_path, strict=False):
     # Step 2. Determine GPX version from the root element.
     version = root.get("version")
     if version not in ("1.0", "1.1"):
-        print(f"Unsupported or missing GPX version: {version}", file=sys.stderr)
-        sys.exit(1)
+        raise GPXValidationError(f"Unsupported or missing GPX version: {version}")
 
     # Step 3. Validate against the corresponding GPX XSD.
     schema = load_schema(version)

@@ -4,6 +4,8 @@ from datetime import datetime
 from lxml import etree as ET
 from pathlib import Path
 
+from gpx_player.timestamps import GPXTimestampError, normalize_datetime, normalize_timestamp_sequence
+
 def cut_gpx_file(file_path, timestamp, cut_type):
     """
     Cuts a GPX file at the point closest to the given timestamp.
@@ -40,9 +42,11 @@ def cut_gpx_file(file_path, timestamp, cut_type):
     return new_file_path
 
 
-def _ensure_aware(ts: datetime, name: str) -> None:
-    if ts.tzinfo is None:
-        raise ValueError(f"trim_track: {name} must be timezone-aware")
+def _ensure_aware(ts: datetime, name: str) -> datetime:
+    try:
+        return normalize_datetime(ts)
+    except GPXTimestampError as exc:
+        raise ValueError(f"trim_track: {name} must be timezone-aware") from exc
 
 
 def trim_track(track: dict, start_time: datetime, end_time: datetime) -> dict:
@@ -50,24 +54,25 @@ def trim_track(track: dict, start_time: datetime, end_time: datetime) -> dict:
 
     The input ``track`` is not mutated. All point fields (including any
     extension keys) and track metadata (``name``, ``description``, ...) are
-    preserved. A ``ValueError`` is raised if the bounds are naive or if point
-    timestamps and bounds disagree on timezone awareness.
+    preserved. Bounds and point times must be timezone-aware; returned point
+    times use UTC, and timestamps must be strictly increasing.
     """
-    _ensure_aware(start_time, "start_time")
-    _ensure_aware(end_time, "end_time")
+    start_time = _ensure_aware(start_time, "start_time")
+    end_time = _ensure_aware(end_time, "end_time")
 
     filtered = []
-    for p in track.get('points', []):
-        t = p.get('time')
-        if t is None:
-            continue
-        if (t.tzinfo is None) != (start_time.tzinfo is None):
-            raise ValueError(
-                "trim_track: point timestamps and start/end_time must both be "
-                "timezone-aware or both be naive"
-            )
+    points = track.get('points', [])
+    context = f"track '{track.get('name') or 'Track'}'"
+    timestamps = normalize_timestamp_sequence(
+        [point.get('time') for point in points],
+        context=context,
+        require_all=True,
+    )
+    for point, t in zip(points, timestamps):
         if start_time <= t <= end_time:
-            filtered.append(dict(p))
+            filtered_point = dict(point)
+            filtered_point['time'] = t
+            filtered.append(filtered_point)
 
     new_track = {k: v for k, v in track.items() if k != 'points'}
     new_track['points'] = filtered

@@ -1,6 +1,7 @@
 import datetime as dt
 import importlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1390,6 +1391,7 @@ const map = {{
 global.Event = function Event(type) {{ this.type = type; }};
 global.window = global;
 global.map_norm = map;
+global.map_invalid = map;
 global.document = {{
   readyState: 'complete',
   body: makeElement('body'),
@@ -1450,7 +1452,7 @@ window.gpxPlayerPlayback = {{
       [
         {{ lat: 0, lon: 0, time: '2024-06-15T12:00:00Z' }},
         {{ lat: 0, lon: 1, time: '2024-06-15T12:01:00Z' }},
-        {{ lat: 1, lon: 1, time: 'not-a-date' }},
+        {{ lat: 1, lon: 1, time: null }},
         {{ lat: 2, lon: 1, time: '2024-06-15T12:02:00Z' }},
       ],
     ],
@@ -1459,11 +1461,11 @@ window.gpxPlayerPlayback = {{
     avgSpeeds: [[0, 1, 2, 3]],
     trackNames: ['Alpha'],
     timestamps: [
-      '2024-06-15T12:00:00Z',
+      null,
       '2024-06-15T12:01:00Z',
       '2024-06-15T12:02:00Z',
     ],
-    minTime: '2024-06-15T12:00:00Z',
+    minTime: null,
     maxTime: '2024-06-15T12:02:00Z',
     timeRange: 120,
     title: 'Test',
@@ -1475,6 +1477,28 @@ window.gpxPlayerPlayback = {{
     sliderInactiveColor: '#ddd',
     tailPointCount: 2,
     fullTrackLayerNames: ['validFullTrackLayer'],
+  }},
+  map_invalid: {{
+    mapId: 'map_invalid',
+    colors: [],
+    points: [],
+    speeds: [],
+    distances: [],
+    avgSpeeds: [],
+    trackNames: [],
+    timestamps: [null, 'not-a-date'],
+    minTime: null,
+    maxTime: null,
+    timeRange: 0,
+    title: 'Invalid timestamps',
+    sliderId: 'slider-invalid',
+    timeLegendId: 'time-invalid',
+    playPauseButtonId: 'play-invalid',
+    boatLegendId: 'legend-invalid',
+    sliderActiveColor: '#111',
+    sliderInactiveColor: '#ddd',
+    tailPointCount: 2,
+    fullTrackLayerNames: [],
   }}
 }};
 {playback_js}
@@ -1483,7 +1507,10 @@ const slider = state.slider;
 const t0 = new Date('2024-06-15T12:00:00Z').getTime();
 const t1 = new Date('2024-06-15T12:01:00Z').getTime();
 const t2 = new Date('2024-06-15T12:02:00Z').getTime();
+assert.strictEqual(state.minTimeMs, t0);
 assert.deepStrictEqual(state.trackTimeValues[0], [t0, t1, t1, t2]);
+assert(Number.isNaN(window.gpxPlayerPlayback.map_invalid.minTimeMs));
+assert(Number.isNaN(window.gpxPlayerPlayback.map_invalid.currentTimeMs));
 
 slider.value = 500;
 slider.dispatchEvent(new Event('input'));
@@ -1644,7 +1671,104 @@ def test_parse_iso_datetime_variants():
     ]
     for s in cases:
         parsed = _parse_iso_datetime(s)
-        assert parsed.tzinfo is not None, f"lost tz for {s!r}"
+        assert parsed.tzinfo is dt.timezone.utc, f"not normalized to UTC for {s!r}"
+    assert _parse_iso_datetime(cases[0]) == _parse_iso_datetime(cases[1])
+
+
+def test_create_map_normalizes_offset_trackpoint_times_to_utc(tmp_path):
+    path = tmp_path / 'offset.gpx'
+    path.write_text(
+        '<gpx version="1.1" creator="tests" xmlns="http://www.topografix.com/GPX/1/1">'
+        '<trk><name>Offset boat</name><trkseg>'
+        '<trkpt lat="53.5" lon="9.8"><time>2024-06-15T14:00:00.250+02:00</time></trkpt>'
+        '<trkpt lat="53.5001" lon="9.8001"><time>2024-06-15T12:00:01.250Z</time></trkpt>'
+        '</trkseg></trk></gpx>',
+        encoding='utf-8',
+    )
+
+    _map, tracks, _max_speed, _map_id = create_map([str(path)], None, 12.0)
+
+    assert [point['time'].isoformat() for point in tracks[0]['points']] == [
+        '2024-06-15T12:00:00.250000+00:00',
+        '2024-06-15T12:00:01.250000+00:00',
+    ]
+
+
+def test_create_map_fails_clearly_when_timestamp_is_missing(tmp_path):
+    path = tmp_path / 'untimed.gpx'
+    path.write_text(
+        '<gpx version="1.1" creator="tests" xmlns="http://www.topografix.com/GPX/1/1">'
+        '<trk><name>Untimed boat</name><trkseg>'
+        '<trkpt lat="53.5" lon="9.8"/><trkpt lat="53.5001" lon="9.8001"/>'
+        '</trkseg></trk></gpx>',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match=r"untimed.gpx.*Untimed boat.*point 1.*missing"):
+        create_map([str(path)], None, 12.0)
+
+
+def test_create_map_rejects_naive_trackpoint_time(tmp_path):
+    path = tmp_path / 'naive.gpx'
+    path.write_text(
+        '<gpx version="1.1" creator="tests" xmlns="http://www.topografix.com/GPX/1/1">'
+        '<trk><name>Naive boat</name><trkseg>'
+        '<trkpt lat="53.5" lon="9.8"><time>2024-06-15T12:00:00</time></trkpt>'
+        '</trkseg></trk></gpx>',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match=r"naive.gpx.*Naive boat.*point 1.*timezone-aware"):
+        create_map([str(path)], None, 12.0)
+
+
+def test_map_cli_reports_missing_timestamp_with_nonzero_status(tmp_path):
+    path = tmp_path / 'untimed-map.gpx'
+    path.write_text(
+        '<gpx version="1.1" creator="tests" xmlns="http://www.topografix.com/GPX/1/1">'
+        '<trk><name>Untimed boat</name><trkseg>'
+        '<trkpt lat="53.5" lon="9.8"/><trkpt lat="53.5001" lon="9.8001"/>'
+        '</trkseg></trk></gpx>',
+        encoding='utf-8',
+    )
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+    result = subprocess.run(
+        [sys.executable, '-m', 'gpx_player.openseamap', '--files', str(path)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode != 0
+    assert 'untimed-map.gpx' in result.stderr
+    assert 'Untimed boat' in result.stderr
+    assert 'point 1' in result.stderr
+    assert 'Traceback' not in result.stderr
+    assert not (tmp_path / 'boat_tracks.html').exists()
+
+
+@pytest.mark.parametrize(
+    ('times', 'expected'),
+    [
+        (('2024-06-15T12:00:00Z', '2024-06-15T14:00:00+02:00'), 'Duplicate timestamp'),
+        (('2024-06-15T12:00:01Z', '2024-06-15T12:00:00Z'), 'strictly increasing'),
+    ],
+)
+def test_create_map_rejects_duplicate_or_decreasing_timestamps(tmp_path, times, expected):
+    path = tmp_path / 'unordered.gpx'
+    path.write_text(
+        '<gpx version="1.1" creator="tests" xmlns="http://www.topografix.com/GPX/1/1">'
+        '<trk><name>Unordered boat</name><trkseg>'
+        f'<trkpt lat="53.5" lon="9.8"><time>{times[0]}</time></trkpt>'
+        f'<trkpt lat="53.5001" lon="9.8001"><time>{times[1]}</time></trkpt>'
+        '</trkseg></trk></gpx>',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match=expected):
+        create_map([str(path)], None, 12.0)
 
 
 def test_create_map_rejects_inverted_window():
