@@ -12,9 +12,9 @@ def cut_gpx_file(file_path, timestamp, cut_type):
 
     :param file_path: Path to the original GPX file.
     :param timestamp: Timezone-aware datetime or a string in the calendar-date form
-        accepted by datetime.fromisoformat on Python 3.9 and 3.10. A timezone
-        offset is required; a trailing 'Z' denotes UTC. Other ISO 8601 forms are
-        not supported by that parser.
+        accepted by datetime.fromisoformat on Python 3.9 and 3.10. Compact '+HHMM'
+        and '-HHMM' offsets accepted by the previous parser remain supported. A
+        timezone offset is required; a trailing 'Z' denotes UTC.
     :param cut_type: 'start' to keep timestamps at or after the cut, or 'end' to
         keep timestamps at or before it.
     :return: Path to the new GPX file. Existing output paths raise FileExistsError.
@@ -27,7 +27,11 @@ def cut_gpx_file(file_path, timestamp, cut_type):
         raise ValueError("cut_type must be 'start' or 'end'")
 
     if isinstance(timestamp, str):
-        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        timestamp_text = timestamp.replace('Z', '+00:00')
+        try:
+            timestamp = datetime.fromisoformat(timestamp_text)
+        except ValueError:
+            timestamp = datetime.strptime(timestamp_text, '%Y-%m-%dT%H:%M:%S%z')
     if not isinstance(timestamp, datetime):
         raise TypeError('timestamp must be a datetime or ISO 8601 string')
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:

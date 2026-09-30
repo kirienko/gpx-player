@@ -263,6 +263,31 @@ def test_cut_gpx_file_uses_inclusive_instants_and_preserves_metadata(
     assert '<v:document>preserve</v:document>' in output_xml
 
 
+def test_cut_gpx_file_accepts_compact_timezone_offset_on_python_310(tmp_path, monkeypatch):
+    import gpx_player.gpx_utils as gpx_utils
+
+    base_datetime = gpx_utils.datetime
+
+    class Python310Datetime(base_datetime):
+        @classmethod
+        def fromisoformat(cls, value):
+            if len(value) >= 5 and value[-5] in '+-' and value[-4:].isdigit():
+                raise ValueError('compact timezone offsets are unsupported')
+            return super().fromisoformat(value)
+
+    monkeypatch.setattr(gpx_utils, 'datetime', Python310Datetime)
+    source = tmp_path / 'track.gpx'
+    _write_cut_gpx(source)
+
+    output = gpx_utils.cut_gpx_file(source, '2024-06-15T15:00:00+0000', 'start')
+
+    result = _parse_cut_gpx(Path(output))
+    assert [point.time.isoformat() for point in result.tracks[0].segments[0].points] == [
+        '2024-06-15T15:00:00+00:00',
+        '2024-06-15T16:00:00+00:00',
+    ]
+
+
 def test_cut_gpx_file_with_empty_selection_preserves_empty_structure_and_metadata(tmp_path):
     source = tmp_path / 'track.gpx'
     _write_cut_gpx(source)
