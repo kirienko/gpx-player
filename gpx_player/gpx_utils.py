@@ -1,43 +1,62 @@
-import gpxpy
-import gpxpy.gpx
+import copy
 from datetime import datetime
-from lxml import etree as ET
 from pathlib import Path
+
+import gpxpy
+from lxml import etree as ET
+
 
 def cut_gpx_file(file_path, timestamp, cut_type):
     """
-    Cuts a GPX file at the point closest to the given timestamp.
+    Cut a GPX file by timestamp and write the result beside the source.
 
     :param file_path: Path to the original GPX file.
-    :param timestamp: Timestamp as a datetime instance or string in the format 'YYYY-MM-DDTHH:MM:SS%z'.
-    :param cut_type: 'start' to keep everything after the timestamp, 'end' to keep everything before.
-    :return: Path to the new GPX file.
-    """
-    if isinstance(timestamp, str):
-        timestamp = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S%z')
+    :param timestamp: Timezone-aware datetime or ISO 8601 string with a timezone.
+    :param cut_type: 'start' to keep timestamps at or after the cut, or 'end' to
+        keep timestamps at or before it.
+    :return: Path to the new GPX file. Existing output paths raise FileExistsError.
 
-    with open(file_path, 'r') as gpx_file:
+    Timestamped points must be timezone-aware. Points without timestamps are
+    omitted because they cannot be ordered against the cut. Empty tracks and
+    segments, along with their metadata, are preserved.
+    """
+    if cut_type not in ('start', 'end'):
+        raise ValueError("cut_type must be 'start' or 'end'")
+
+    if isinstance(timestamp, str):
+        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    if not isinstance(timestamp, datetime):
+        raise TypeError('timestamp must be a datetime or ISO 8601 string')
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError('timestamp must be timezone-aware')
+
+    source_path = Path(file_path)
+    with source_path.open('r', encoding='utf-8') as gpx_file:
         gpx = gpxpy.parse(gpx_file)
 
-    new_gpx = gpxpy.gpx.GPX()
+    new_gpx = copy.deepcopy(gpx)
 
-    for track in gpx.tracks:
-        new_track = gpxpy.gpx.GPXTrack()
-        new_gpx.tracks.append(new_track)
-
+    for track in new_gpx.tracks:
         for segment in track.segments:
-            new_segment = gpxpy.gpx.GPXTrackSegment()
-            new_track.segments.append(new_segment)
-
+            retained_points = []
             for point in segment.points:
-                if (cut_type == 'start' and point.time >= timestamp) or (cut_type == 'end' and point.time <= timestamp):
-                    new_segment.points.append(point)
+                if point.time is None:
+                    continue
+                if point.time.tzinfo is None or point.time.utcoffset() is None:
+                    raise ValueError('GPX point timestamps must be timezone-aware')
+                if (
+                    cut_type == 'start' and point.time >= timestamp
+                    or cut_type == 'end' and point.time <= timestamp
+                ):
+                    retained_points.append(point)
+            segment.points = retained_points
 
-    new_file_path = file_path.replace('.gpx', '_cut.gpx')
-    with open(new_file_path, 'w') as f:
-        f.write(new_gpx.to_xml())
+    output_suffix = source_path.suffix or '.gpx'
+    output_path = source_path.with_name(f'{source_path.stem}_cut{output_suffix}')
+    with output_path.open('x', encoding='utf-8') as output_file:
+        output_file.write(new_gpx.to_xml())
 
-    return new_file_path
+    return str(output_path)
 
 
 def _ensure_aware(ts: datetime, name: str) -> None:
