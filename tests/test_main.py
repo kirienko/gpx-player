@@ -87,6 +87,83 @@ def test_one_empty_track_fails_before_rendering(tmp_path, track):
 
 
 @pytest.mark.parametrize('command', [CONSOLE, MODULE], ids=['console', 'module'])
+def test_video_cli_accepts_fractional_seconds_and_numeric_offset_bounds(tmp_path, track, command):
+    result = run_cli(
+        tmp_path,
+        command,
+        track,
+        '-g',
+        '--start', '2023-07-01T13:00:00.000+02:00',
+        '--end', '2023-07-01T13:00:01.000+02:00',
+    )
+
+    assert result.returncode == 0, result.stderr
+    with Image.open(tmp_path / 'untitled.gif') as rendered:
+        assert rendered.n_frames == 2
+
+
+def test_video_cli_missing_timestamp_fails_with_file_track_and_point(tmp_path):
+    untimed = tmp_path / 'untimed.gpx'
+    untimed.write_text('''<gpx version="1.1" creator="tests"
+        xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Untimed boat</name><trkseg>
+        <trkpt lat="53.5" lon="9.8"/><trkpt lat="53.5001" lon="9.8001"/>
+        </trkseg></trk></gpx>''', encoding='utf-8')
+
+    result = run_cli(tmp_path, MODULE, str(untimed), '-g')
+
+    assert result.returncode != 0
+    assert 'untimed.gpx' in result.stderr
+    assert 'Untimed boat' in result.stderr
+    assert 'point 1' in result.stderr
+    assert 'missing' in result.stderr
+    assert 'Traceback' not in result.stderr
+    assert not list(tmp_path.glob('*.gif'))
+
+
+def test_video_cli_rejects_naive_timestamp_with_file_track_and_point(tmp_path):
+    naive = tmp_path / 'naive.gpx'
+    naive.write_text('''<gpx version="1.1" creator="tests"
+        xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Naive boat</name><trkseg>
+        <trkpt lat="53.5" lon="9.8"><time>2023-07-01T11:00:00</time></trkpt>
+        </trkseg></trk></gpx>''', encoding='utf-8')
+
+    result = run_cli(tmp_path, MODULE, str(naive), '-g')
+
+    assert result.returncode != 0
+    assert 'naive.gpx' in result.stderr
+    assert 'Naive boat' in result.stderr
+    assert 'point 1' in result.stderr
+    assert 'timezone-aware' in result.stderr
+    assert 'Traceback' not in result.stderr
+    assert not list(tmp_path.glob('*.gif'))
+
+
+@pytest.mark.parametrize(
+    ('times', 'expected'),
+    [
+        (('2023-07-01T11:00:00Z', '2023-07-01T13:00:00+02:00'), 'Duplicate timestamp'),
+        (('2023-07-01T11:00:01Z', '2023-07-01T11:00:00Z'), 'strictly increasing'),
+    ],
+)
+def test_video_cli_rejects_duplicate_or_decreasing_timestamps(tmp_path, times, expected):
+    unordered = tmp_path / 'unordered.gpx'
+    unordered.write_text(f'''<gpx version="1.1" creator="tests"
+        xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Unordered boat</name><trkseg>
+        <trkpt lat="53.5" lon="9.8"><time>{times[0]}</time></trkpt>
+        <trkpt lat="53.5001" lon="9.8001"><time>{times[1]}</time></trkpt>
+        </trkseg></trk></gpx>''', encoding='utf-8')
+
+    result = run_cli(tmp_path, MODULE, str(unordered), '-g')
+
+    assert result.returncode != 0
+    assert expected in result.stderr
+    assert 'unordered.gpx' in result.stderr
+    assert 'Unordered boat' in result.stderr
+    assert 'Traceback' not in result.stderr
+    assert not list(tmp_path.glob('*.gif'))
+
+
+@pytest.mark.parametrize('command', [CONSOLE, MODULE], ids=['console', 'module'])
 def test_save_failure_is_not_success(tmp_path, track, command):
     result = run_cli(tmp_path, command, track, '-g', '-o', 'missing/output.gif')
     assert result.returncode != 0

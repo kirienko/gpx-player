@@ -152,6 +152,44 @@ def test_trim_track_naive_vs_aware_raises():
         trim_track(track, aware_start, aware_end)
 
 
+def test_trim_track_normalizes_offset_timestamps_to_utc():
+    start = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    track = {
+        'points': [
+            {
+                'lat': 1.0,
+                'lon': 2.0,
+                'time': dt.datetime.fromisoformat('2024-06-15T14:00:00+02:00'),
+            },
+        ],
+    }
+
+    trimmed = trim_track(track, start, start + dt.timedelta(minutes=1))
+
+    assert trimmed['points'][0]['time'] == start
+    assert trimmed['points'][0]['time'].tzinfo is dt.timezone.utc
+
+
+@pytest.mark.parametrize(
+    ('second_time', 'expected'),
+    [
+        ('2024-06-15T14:00:00+02:00', 'Duplicate timestamp'),
+        ('2024-06-15T11:59:59Z', 'strictly increasing'),
+    ],
+)
+def test_trim_track_rejects_duplicate_or_decreasing_instants(second_time, expected):
+    first = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    track = {
+        'points': [
+            {'lat': 1.0, 'lon': 2.0, 'time': first},
+            {'lat': 1.0, 'lon': 2.0, 'time': dt.datetime.fromisoformat(second_time)},
+        ],
+    }
+
+    with pytest.raises(ValueError, match=expected):
+        trim_track(track, first - dt.timedelta(minutes=1), first + dt.timedelta(minutes=1))
+
+
 def test_trim_tracks_wrapper():
     t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
     tracks = [_make_track(5, t0), _make_track(5, t0 + dt.timedelta(hours=1))]

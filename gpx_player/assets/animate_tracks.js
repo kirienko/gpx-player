@@ -227,11 +227,18 @@ ${sliderSelector}::-moz-range-thumb {
         return state.points.map((track) => normalizeTrackTimeValues(track));
     }
 
+    function timestampToMilliseconds(value) {
+        if (typeof value !== "string" || !value.trim()) {
+            return Number.NaN;
+        }
+        return new Date(value).getTime();
+    }
+
     function normalizeTrackTimeValues(track) {
         if (!track.length) {
             return [];
         }
-        const normalized = track.map((point) => new Date(point.time).getTime());
+        const normalized = track.map((point) => timestampToMilliseconds(point.time));
         let lastValidTime = null;
         let firstValidTime = null;
 
@@ -247,7 +254,7 @@ ${sliderSelector}::-moz-range-thumb {
         }
 
         if (firstValidTime === null) {
-            return normalized.map(() => 0);
+            return normalized;
         }
 
         for (let i = 0; i < normalized.length; i++) {
@@ -455,20 +462,24 @@ ${sliderSelector}::-moz-range-thumb {
 
     function initializePlaybackClock(state) {
         const timestampValues = (state.timestamps || [])
-            .map((timestamp) => new Date(timestamp).getTime())
+            .map(timestampToMilliseconds)
             .filter((timestamp) => Number.isFinite(timestamp));
-        const payloadMinTime = new Date(state.minTime).getTime();
-        const payloadMaxTime = new Date(state.maxTime).getTime();
-        state.minTimeMs = Number.isFinite(payloadMinTime)
-            ? payloadMinTime
-            : Math.min(...timestampValues);
-        state.maxTimeMs = Number.isFinite(payloadMaxTime)
-            ? payloadMaxTime
-            : Math.max(...timestampValues);
-        if (!Number.isFinite(state.minTimeMs)) {
-            state.minTimeMs = 0;
-        }
-        if (!Number.isFinite(state.maxTimeMs) || state.maxTimeMs < state.minTimeMs) {
+        (state.points || []).forEach((track) => {
+            track.forEach((point) => {
+                const timestamp = timestampToMilliseconds(point.time);
+                if (Number.isFinite(timestamp)) {
+                    timestampValues.push(timestamp);
+                }
+            });
+        });
+        const payloadMinTime = timestampToMilliseconds(state.minTime);
+        const payloadMaxTime = timestampToMilliseconds(state.maxTime);
+        const timestampsMin = timestampValues.length ? Math.min(...timestampValues) : Number.NaN;
+        const timestampsMax = timestampValues.length ? Math.max(...timestampValues) : Number.NaN;
+        state.minTimeMs = Number.isFinite(payloadMinTime) ? payloadMinTime : timestampsMin;
+        state.maxTimeMs = Number.isFinite(payloadMaxTime) ? payloadMaxTime : timestampsMax;
+        if (Number.isFinite(state.minTimeMs) &&
+                (!Number.isFinite(state.maxTimeMs) || state.maxTimeMs < state.minTimeMs)) {
             state.maxTimeMs = state.minTimeMs;
         }
         state.currentTimeMs = state.minTimeMs;

@@ -1,7 +1,7 @@
 import argparse
 import datetime as dt
 import json
-import re
+import sys
 from html import escape as html_escape
 from importlib import resources
 from typing import List, Optional, Sequence, Tuple
@@ -15,11 +15,17 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from folium.template import Template
 
 from gpx_player.gpx_utils import trim_track
+from gpx_player.timestamps import (
+    GPXRenderReadinessError,
+    GPXTimestampError,
+    normalize_datetime,
+    normalize_timestamp_sequence,
+    parse_iso_datetime,
+)
 from gpx_player.utils import track_serializer
 
 _ASSET_PACKAGE = "gpx_player.assets"
 _TRACK_COLORS = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 'pink', 'yellow', 'cyan', 'magenta']
-_COMPACT_TZ_RE = re.compile(r"([+-]\d{2})(\d{2})$")
 _DEFAULT_SLIDER_ACTIVE_COLOR = "#6e6e6e"
 _DEFAULT_SLIDER_INACTIVE_COLOR = "#d0d0d0"
 _TAIL_LENGTH_PRESETS = {
@@ -130,11 +136,7 @@ def _playback_segment_color_scale(all_tracks: List[dict]) -> float:
 
 
 def _parse_iso_datetime(s: str) -> dt.datetime:
-    # fromisoformat accepts fractional seconds and common ISO variants;
-    # normalise a trailing 'Z' to '+00:00' for Python < 3.11 compatibility.
-    normalized = s.replace('Z', '+00:00')
-    normalized = _COMPACT_TZ_RE.sub(r"\1:\2", normalized)
-    return dt.datetime.fromisoformat(normalized)
+    return parse_iso_datetime(s)
 
 
 def parse_arguments():
@@ -160,11 +162,24 @@ def parse_gpx(file_path: str) -> List[dict]:
     with open(file_path, 'r') as gpx_file:
         gpx = gpxpy.parse(gpx_file)
         all_tracks = []
-        for track in gpx.tracks:
-            points = [
-                {'lat': point.latitude, 'lon': point.longitude, 'time': point.time}
+        for track_index, track in enumerate(gpx.tracks, start=1):
+            raw_points = [
+                point
                 for segment in track.segments
                 for point in segment.points
+            ]
+            track_name = track.name or f"track {track_index}"
+            try:
+                normalized_times = normalize_timestamp_sequence(
+                    [point.time for point in raw_points],
+                    context=f"{file_path}: track '{track_name}'",
+                    require_all=True,
+                )
+            except GPXTimestampError as exc:
+                raise GPXRenderReadinessError(str(exc)) from exc
+            points = [
+                {'lat': point.latitude, 'lon': point.longitude, 'time': timestamp}
+                for point, timestamp in zip(raw_points, normalized_times)
             ]
             all_tracks.append({
                 'name': track.name,
@@ -290,6 +305,10 @@ def create_map(
     ``[start_time, end_time]`` are rendered. Points outside the window are
     excluded from the map, speed calculations, and distance totals.
     """
+    if start_time is not None:
+        start_time = normalize_datetime(start_time)
+    if end_time is not None:
+        end_time = normalize_datetime(end_time)
     if start_time is not None and end_time is not None and start_time > end_time:
         raise ValueError(
             f"start_time ({start_time}) must be <= end_time ({end_time})"
@@ -607,11 +626,15 @@ def main():
     gpx_files = args.files
     names = args.names
 
-    folium_map, all_tracks, max_speed, map_id = create_map(
-        gpx_files, names, args.max_speed,
-        start_time=args.start, end_time=args.end,
-        show_layer_control=False,
-    )
+    try:
+        folium_map, all_tracks, max_speed, map_id = create_map(
+            gpx_files, names, args.max_speed,
+            start_time=args.start, end_time=args.end,
+            show_layer_control=False,
+        )
+    except GPXTimestampError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     if not all_tracks:
         print("No GPX points found in the selected time window; nothing to render.")
         return
@@ -628,4 +651,4 @@ def main():
     print('Map has been saved to boat_tracks.html')
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,5 +1,4 @@
 import argparse
-import datetime as dt
 from math import atan2, degrees
 
 import gpxpy
@@ -9,6 +8,8 @@ import pytz
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 from gpx_player.utils import format_func, gen_arrow_head_marker, km_to_nm, slug, timedelta_to_hms
+from gpx_player.openseamap import parse_gpx
+from gpx_player.timestamps import GPXTimestampError, parse_iso_datetime
 
 
 def main(argv=None):
@@ -18,10 +19,10 @@ def main(argv=None):
     parser.add_argument('files', nargs='+', help='GPX files to process')
     parser.add_argument('--title', '-t', help='The title of the video')
     parser.add_argument('--output', '-o', help='Output file path (default: slugified title with .gif or .mp4)')
-    parser.add_argument('--start', '-s', type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'), help='Start time (YYYY-MM-DDTHH:MM:SS%z)')
-    parser.add_argument('--end', '-e', type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'), help='End time (YYYY-MM-DDTHH:MM:SS%z)')
-    parser.add_argument('--race_start', '-r', type=lambda s: dt.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S%z'),
-                        help='Race start time (YYYY-MM-DDTHH:MM:SS%z)')
+    parser.add_argument('--start', '-s', type=parse_iso_datetime, help='Start time (timezone-aware ISO 8601)')
+    parser.add_argument('--end', '-e', type=parse_iso_datetime, help='End time (timezone-aware ISO 8601)')
+    parser.add_argument('--race_start', '-r', type=parse_iso_datetime,
+                        help='Race start time (timezone-aware ISO 8601)')
     parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
     parser.add_argument('--marks', '-m', help='The file with the static marks to put onto the map. One pair of coordinates per line')
     parser.add_argument('--gif', '-g', action='store_true', help='Save as GIF moving picture instead of MP4')
@@ -37,11 +38,16 @@ def main(argv=None):
 
     # Parse the GPX files
     for filename in args.files:
-        with open(filename, 'r') as gpx_file:
-            gpx = gpxpy.parse(gpx_file)
+        try:
+            tracks = parse_gpx(filename)
+        except GPXTimestampError as exc:
+            parser.error(str(exc))
         # all timestamps show the local time from this point on:
-        points = [(point.latitude, point.longitude, point.time.astimezone(local_tz)) for track in gpx.tracks for segment in track.segments for
-                  point in segment.points]
+        points = [
+            (point['lat'], point['lon'], point['time'].astimezone(local_tz))
+            for track in tracks
+            for point in track['points']
+        ]
         if start_time:
             points = [(lat, lon, time) for (lat, lon, time) in points if time >= start_time]
         if end_time:
