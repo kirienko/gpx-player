@@ -57,6 +57,25 @@ def _write_sample_gpx(n_points=6, step_seconds=60, start="2024-06-15T12:00:00Z",
     tmp.close()
     return tmp.name, t0
 
+
+def _write_segmented_gpx(tmp_path, segments, track_name="Segmented Track"):
+    ns = "http://www.topografix.com/GPX/1/1"
+    track_segments = []
+    for points in segments:
+        point_xml = []
+        for lat, lon, timestamp in points:
+            point_xml.append(
+                f'<trkpt lat="{lat}" lon="{lon}"><time>{timestamp}</time></trkpt>'
+            )
+        track_segments.append(f'<trkseg>{"".join(point_xml)}</trkseg>')
+    path = tmp_path / "segmented.gpx"
+    path.write_text(
+        f'<gpx version="1.1" creator="pytest" xmlns="{ns}">'
+        f'<trk><name>{track_name}</name>{"".join(track_segments)}</trk></gpx>',
+        encoding="utf-8",
+    )
+    return path
+
 def test_parse_gpx():
     sample_gpx = '''<?xml version="1.0" encoding="UTF-8"?>
     <gpx version="1.1" creator="pytest">
@@ -89,6 +108,17 @@ def test_parse_gpx():
     assert points[1]['lon'] == -71.1
     assert points[1]['time'].isoformat() == '2021-01-01T12:10:00+00:00'
     assert name == 'Test Track'
+
+
+def test_parse_gpx_preserves_track_segment_indexes(tmp_path):
+    path = _write_segmented_gpx(tmp_path, [
+        [(0, 0, "2024-06-15T12:00:00Z"), (0, 0.001, "2024-06-15T12:01:00Z")],
+        [(0, 1, "2024-06-15T13:00:00Z")],
+    ])
+
+    points = parse_gpx(path)[0]["points"]
+
+    assert [point["segment_index"] for point in points] == [0, 0, 1]
 
 def test_speed_to_color():
     # Test cases for speed_to_color function
@@ -127,7 +157,7 @@ def test_accumulate_distances_and_avg_speed():
         },
     ]
 
-    dists = accumulate_distances(points)
+    dists = accumulate_distances(points, max_speed=100.0)
 
     expected_first = 0.0
     one_deg_nm = gpxpy.geo.haversine_distance(0, 0, 0, 1) / 1852.0
@@ -139,12 +169,32 @@ def test_accumulate_distances_and_avg_speed():
     assert dists[1] == pytest.approx(expected_second)
     assert dists[2] == pytest.approx(expected_third)
 
-    avgs = calculate_average_speeds(points, dists)
+    avgs = calculate_average_speeds(points, dists, max_speed=100.0)
 
     assert len(avgs) == 3
-    assert avgs[0] == 0.0
+    assert avgs[0] is None
     assert avgs[1] == pytest.approx(expected_second / 1.0)
     assert avgs[2] == pytest.approx(expected_third / 2.0)
+
+
+def test_distance_and_average_helpers_exclude_rejected_jump_by_default():
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    points = [
+        {'lat': 0.0, 'lon': 0.0, 'time': t0},
+        {'lat': 0.0, 'lon': 0.0001, 'time': t0 + dt.timedelta(seconds=10)},
+        {'lat': 0.0, 'lon': 1.0, 'time': t0 + dt.timedelta(seconds=20)},
+        {'lat': 0.0, 'lon': 1.0001, 'time': t0 + dt.timedelta(seconds=30)},
+    ]
+
+    distances = accumulate_distances(points)
+    averages = calculate_average_speeds(points, distances)
+    one_small_step_nm = gpxpy.geo.haversine_distance(0, 0, 0, 0.0001) / 1852.0
+
+    assert distances == pytest.approx([0, one_small_step_nm, one_small_step_nm, 2 * one_small_step_nm])
+    assert averages[0] is None
+    assert averages[1] > 0
+    assert averages[2] is None
+    assert averages[3] == pytest.approx(averages[1])
 
 
 def test_display_speeds_smooth_zero_jump_quantization():
@@ -178,6 +228,91 @@ def test_display_speeds_preserve_sustained_stops():
 
     assert display_speeds[0] > 0
     assert display_speeds[1:] == [0.0, 0.0]
+
+
+def test_create_map_does_not_count_or_draw_across_track_segments(tmp_path):
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    path = _write_segmented_gpx(tmp_path, [
+        [
+            (0, 0, t0.isoformat()),
+            (0, 0.001, (t0 + dt.timedelta(minutes=1)).isoformat()),
+        ],
+        [(0, 1, (t0 + dt.timedelta(hours=1)).isoformat())],
+    ])
+
+    folium_map, all_tracks, _max_speed, _map_id = create_map(
+        [str(path)], names=None, max_speed=12.0,
+    )
+    track = all_tracks[0]
+    one_small_step_nm = gpxpy.geo.haversine_distance(0, 0, 0, 0.001) / 1852.0
+    feature_group = folium_map._children[track["track_layer_name"]]
+
+    assert [point["segment_index"] for point in track["points"]] == [0, 0, 1]
+    assert track["seg_speeds"][0] > 0
+    assert track["seg_speeds"][1] is None
+    assert track["display_seg_speeds"][1] is None
+    assert track["distances"] == pytest.approx([0, one_small_step_nm, one_small_step_nm])
+    assert track["point_speeds"] == [None, track["seg_speeds"][0], None]
+    assert track["avg_speeds"][0] is None
+    assert track["avg_speeds"][1] == pytest.approx(one_small_step_nm * 60)
+    assert track["avg_speeds"][2] is None
+    assert len(feature_group._children) == 1
+
+    _trimmed_map, trimmed_tracks, _trimmed_max_speed, _trimmed_id = create_map(
+        [str(path)], names=None, max_speed=12.0,
+        start_time=t0 + dt.timedelta(seconds=30),
+        end_time=t0 + dt.timedelta(hours=2),
+    )
+    trimmed = trimmed_tracks[0]
+    assert [point["segment_index"] for point in trimmed["points"]] == [0, 1]
+    assert trimmed["distances"] == [0.0, 0.0]
+    assert trimmed["seg_speeds"] == [None]
+
+
+def test_create_map_rejects_spikes_without_hiding_real_stops(tmp_path):
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    path = _write_segmented_gpx(tmp_path, [[
+        (0, 0, t0.isoformat()),
+        (0, 0.0001, (t0 + dt.timedelta(seconds=10)).isoformat()),
+        (0, 1, (t0 + dt.timedelta(seconds=20)).isoformat()),
+        (0, 0.0002, (t0 + dt.timedelta(seconds=30)).isoformat()),
+        (0, 0.0003, (t0 + dt.timedelta(seconds=40)).isoformat()),
+    ]])
+
+    _map, all_tracks, _max_speed, _map_id = create_map(
+        [str(path)], names=None, max_speed=12.0,
+    )
+    track = all_tracks[0]
+    tiny_step_nm = gpxpy.geo.haversine_distance(0, 0, 0, 0.0001) / 1852.0
+
+    assert track["seg_speeds"][0] > 0
+    assert track["seg_speeds"][1] is None
+    assert track["seg_speeds"][2] is None
+    assert track["seg_speeds"][3] > 0
+    assert track["display_seg_speeds"][1:3] == [None, None]
+    assert track["distances"] == pytest.approx([0, tiny_step_nm, tiny_step_nm, tiny_step_nm, 2 * tiny_step_nm])
+    assert track["point_speeds"] == [None, track["seg_speeds"][0], None, None, track["seg_speeds"][3]]
+    assert track["avg_speeds"][1] > 0
+    assert track["avg_speeds"][2:4] == [None, None]
+    assert track["distances"][4] == pytest.approx(2 * tiny_step_nm)
+    assert len(_map._children[track["track_layer_name"]]._children) == 2
+
+
+def test_create_map_distinguishes_stationary_segments_from_rejected_data(tmp_path):
+    t0 = dt.datetime(2024, 6, 15, 12, 0, tzinfo=dt.timezone.utc)
+    path = _write_segmented_gpx(tmp_path, [[
+        (0, 0, t0.isoformat()),
+        (0, 0, (t0 + dt.timedelta(seconds=10)).isoformat()),
+    ]])
+
+    _map, all_tracks, _max_speed, _map_id = create_map(
+        [str(path)], names=None, max_speed=12.0,
+    )
+
+    assert all_tracks[0]["seg_speeds"] == [0.0]
+    assert all_tracks[0]["display_seg_speeds"] == [0.0]
+    assert all_tracks[0]["distances"] == [0.0, 0.0]
+    assert all_tracks[0]["avg_speeds"] == [None, 0.0]
 
 
 def test_create_map_default_unchanged():
@@ -540,9 +675,9 @@ window.gpxPlayerPlayback = {{
     mapId: 'map_test',
     colors: ['red'],
     points: [[
-      {{ lat: 1, lon: 1, time: '2024-06-15T12:00:00Z' }},
-      {{ lat: 2, lon: 1, time: '2024-06-15T12:01:00Z' }},
-      {{ lat: 2, lon: 2, time: '2024-06-15T12:03:00Z' }},
+      {{ lat: 1, lon: 1, time: '2024-06-15T12:00:00Z', segment_index: 0, valid_from_previous: false }},
+      {{ lat: 2, lon: 1, time: '2024-06-15T12:01:00Z', segment_index: 0, valid_from_previous: true }},
+      {{ lat: 2, lon: 2, time: '2024-06-15T12:03:00Z', segment_index: 1, valid_from_previous: false }},
     ]],
     speeds: [[0, 1, 2]],
     distances: [[0, 1, 2]],
@@ -580,6 +715,14 @@ slider.dispatchEvent(new Event('input'));
 assert.strictEqual(state.currentTimeMs, Date.parse('2024-06-15T12:01:30Z'));
 assert.deepStrictEqual(state.currentPointIndexes, [1]);
 assert.deepStrictEqual(state.currentSegmentIndexes, [1]);
+assert.deepStrictEqual(state.trackMarkers[0].latlng, [2, 1]);
+state.trackModeControls[0].value = 'tail';
+state.trackModeControls[0].dispatchEvent(new Event('change'));
+assert.deepStrictEqual(state.tailStrokeLayers[0].latlngs, [[1, 1], [2, 1]]);
+slider.value = 1000;
+slider.dispatchEvent(new Event('input'));
+assert.deepStrictEqual(state.trackMarkers[0].latlng, [2, 2]);
+assert.deepStrictEqual(state.tailStrokeLayers[0].latlngs, [[2, 2]]);
 slider.value = 250;
 slider.dispatchEvent(new Event('input'));
 assert.strictEqual(state.currentTimeMs, Date.parse('2024-06-15T12:00:45Z'));
@@ -1619,8 +1762,8 @@ def test_create_map_uses_display_speeds_for_rendered_speed_scale():
     assert track['seg_speeds'][2] > 12.0
     assert track['display_seg_speeds'][:2] == [0.0, 0.0]
     assert track['display_seg_speeds'][2] == pytest.approx(track['seg_speeds'][2] / 3.0)
-    assert track['display_point_speeds'] == [0.0] + track['display_seg_speeds']
-    assert track['point_speeds'] == [0.0] + track['seg_speeds']
+    assert track['display_point_speeds'] == [None] + track['display_seg_speeds']
+    assert track['point_speeds'] == [None] + track['seg_speeds']
     assert max_speed == pytest.approx(track['display_seg_speeds'][2])
 
 

@@ -15,6 +15,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from folium.template import Template
 
 from gpx_player.gpx_utils import trim_track
+from gpx_player.track_metrics import DEFAULT_MAX_SPEED_KNOTS, edge_metrics, same_track_segment
 from gpx_player.utils import track_serializer
 
 _ASSET_PACKAGE = "gpx_player.assets"
@@ -112,7 +113,7 @@ def _normalize_track_layer_names(
 def _segment_colors(all_tracks: List[dict], max_speed: float) -> List[List[str]]:
     return [
         [
-            speed_to_color(speed, max_speed)
+            speed_to_color(speed if speed is not None else 0.0, max_speed)
             for speed in track.get('display_seg_speeds', track['seg_speeds'])
         ]
         for track in all_tracks
@@ -124,7 +125,7 @@ def _playback_segment_color_scale(all_tracks: List[dict]) -> float:
         speed
         for track in all_tracks
         for speed in track.get('display_seg_speeds', track['seg_speeds'])
-        if speed > 0
+        if speed is not None and speed > 0
     ]
     return max(positive_speeds) if positive_speeds else 1.0
 
@@ -141,7 +142,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Animate GPX tracks on an OpenSeaMap.")
     parser.add_argument('--files', nargs='+', required=True, help='GPX files to process')
     parser.add_argument('--names', '-n', nargs='+', help='Names of the participants')
-    parser.add_argument('--max-speed', '-ms', type=float, default=12, help='Maximum speed in knots (default: 12)')
+    parser.add_argument(
+        '--max-speed', '-ms', type=float, default=DEFAULT_MAX_SPEED_KNOTS,
+        help=f'Maximum speed in knots (default: {DEFAULT_MAX_SPEED_KNOTS:g})',
+    )
     parser.add_argument('--title', '-t', help='The title of the page')
     parser.add_argument('--start', '-s',
                         type=_parse_iso_datetime,
@@ -162,8 +166,13 @@ def parse_gpx(file_path: str) -> List[dict]:
         all_tracks = []
         for track in gpx.tracks:
             points = [
-                {'lat': point.latitude, 'lon': point.longitude, 'time': point.time}
-                for segment in track.segments
+                {
+                    'lat': point.latitude,
+                    'lon': point.longitude,
+                    'time': point.time,
+                    'segment_index': segment_index,
+                }
+                for segment_index, segment in enumerate(track.segments)
                 for point in segment.points
             ]
             all_tracks.append({
@@ -174,93 +183,117 @@ def parse_gpx(file_path: str) -> List[dict]:
     return all_tracks
 
 
-def calculate_speeds(points: List[dict], max_speed: float) -> List[float]:
-    """
-    Calculates the speed of each point in the list of points.
-
-    The `max_speed` is used to control the dirty data: if the speed is larger
-    than some reasonable value (max_speed), then usually this means zero division,
-    that's we simply nullify the speed.
-    """
-    speeds = []
-    for i in range(1, len(points)):
-        lat1, lon1, time1 = points[i - 1].values()
-        lat2, lon2, time2 = points[i].values()
-        distance = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2)
-        time_diff = (time2 - time1).total_seconds()
-        if time_diff > 0:
-            speed = (distance / time_diff) * 1.94384  # Convert m/s to knots
-            if speed > max_speed:
-                print(f"Warning: speed {speed:.2f} exceeds {max_speed} kn at time {time1} (dt = {time_diff:.2f}s)")
-                speed = 0
-            speeds.append(speed)
-        else:
-            speeds.append(0)
-    return speeds
+def calculate_speeds(
+    points: List[dict],
+    max_speed: float,
+    *,
+    _edges: Optional[List[Optional[Tuple[float, float, float]]]] = None,
+) -> List[Optional[float]]:
+    """Return speed for trusted adjacent points; invalid or disconnected edges are unavailable."""
+    edges = edge_metrics(points, max_speed) if _edges is None else _edges
+    return [edge[2] if edge is not None else None for edge in edges]
 
 
 def calculate_display_speeds(
     points: List[dict],
     max_speed: float,
     window_seconds: float = _DISPLAY_SPEED_WINDOW_SECONDS,
-) -> List[float]:
+    *,
+    _edges: Optional[List[Optional[Tuple[float, float, float]]]] = None,
+) -> List[Optional[float]]:
     """Return segment display speeds smoothed over a trailing time window."""
     if len(points) < 2:
         return []
+    edges = edge_metrics(points, max_speed) if _edges is None else _edges
     if window_seconds <= 0:
-        return calculate_speeds(points, max_speed)
-
-    cumulative_meters = [0.0]
-    for i in range(1, len(points)):
-        lat1, lon1 = points[i - 1]['lat'], points[i - 1]['lon']
-        lat2, lon2 = points[i]['lat'], points[i]['lon']
-        distance = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2)
-        cumulative_meters.append(cumulative_meters[-1] + distance)
+        return [edge[2] if edge is not None else None for edge in edges]
 
     speeds = []
-    for i in range(1, len(points)):
-        end_time = points[i]['time']
-        start_index = i - 1
+    for edge_index, edge in enumerate(edges):
+        if edge is None:
+            speeds.append(None)
+            continue
+        end_index = edge_index + 1
+        start_index = edge_index
+        distance, _elapsed, _speed = edge
         while start_index > 0:
-            elapsed = (end_time - points[start_index]['time']).total_seconds()
-            if elapsed >= window_seconds:
+            previous = edges[start_index - 1]
+            if previous is None:
                 break
-            start_index -= 1
-
-        elapsed = (end_time - points[start_index]['time']).total_seconds()
+            candidate_start = start_index - 1
+            elapsed = (points[end_index]['time'] - points[candidate_start]['time']).total_seconds()
+            if elapsed > window_seconds:
+                break
+            distance += previous[0]
+            start_index = candidate_start
+        elapsed = (points[end_index]['time'] - points[start_index]['time']).total_seconds()
         if elapsed > 0:
-            distance = cumulative_meters[i] - cumulative_meters[start_index]
             speed = (distance / elapsed) * 1.94384
-            if speed > max_speed:
-                speed = 0
             speeds.append(speed)
         else:
-            speeds.append(0.0)
+            speeds.append(None)
     return speeds
 
 
-def accumulate_distances(points: List[dict]) -> List[float]:
+def accumulate_distances(
+    points: List[dict],
+    segment_speeds: Optional[List[Optional[float]]] = None,
+    *,
+    max_speed: float = DEFAULT_MAX_SPEED_KNOTS,
+    _edges: Optional[List[Optional[Tuple[float, float, float]]]] = None,
+) -> List[float]:
     """Return cumulative distance in nautical miles for each point."""
+    edges = _edges
+    if edges is None and segment_speeds is None:
+        edges = edge_metrics(points, max_speed)
     distances = [0.0]
     total = 0.0
     for i in range(1, len(points)):
-        lat1, lon1 = points[i - 1]['lat'], points[i - 1]['lon']
-        lat2, lon2 = points[i]['lat'], points[i]['lon']
-        total += gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2) / 1852.0
+        start, end = points[i - 1], points[i]
+        edge = edges[i - 1] if edges is not None else None
+        valid = same_track_segment(start, end)
+        if segment_speeds is not None:
+            valid = valid and segment_speeds[i - 1] is not None
+        if edges is not None:
+            valid = valid and edge is not None
+        if valid:
+            distance_meters = edge[0] if edge is not None else gpxpy.geo.haversine_distance(
+                start['lat'], start['lon'], end['lat'], end['lon'],
+            )
+            total += distance_meters / 1852.0
         distances.append(total)
     return distances
 
 
-def calculate_average_speeds(points: List[dict], distances: List[float]) -> List[float]:
+def calculate_average_speeds(
+    points: List[dict],
+    distances: List[float],
+    segment_speeds: Optional[List[Optional[float]]] = None,
+    *,
+    max_speed: float = DEFAULT_MAX_SPEED_KNOTS,
+    _edges: Optional[List[Optional[Tuple[float, float, float]]]] = None,
+) -> List[Optional[float]]:
     """Return average speed in knots for each point."""
-    avgs = [0.0]
-    start_time = points[0]['time']
+    edges = _edges
+    if edges is None and segment_speeds is None:
+        edges = edge_metrics(points, max_speed)
+    avgs: List[Optional[float]] = [None]
+    elapsed_seconds = 0.0
     for i in range(1, len(points)):
-        hours = (points[i]['time'] - start_time).total_seconds() / 3600.0
-        if hours > 0:
-            avgs.append(distances[i] / hours)
+        edge = edges[i - 1] if edges is not None else None
+        valid = same_track_segment(points[i - 1], points[i])
+        if segment_speeds is not None:
+            valid = valid and segment_speeds[i - 1] is not None
+        if edges is not None:
+            valid = valid and edge is not None
+        elapsed = edge[1] if edge is not None else (
+            points[i]['time'] - points[i - 1]['time']
+        ).total_seconds()
+        if valid and elapsed > 0:
+            elapsed_seconds += elapsed
+            avgs.append(distances[i] / (elapsed_seconds / 3600.0))
         else:
-            avgs.append(0.0)
+            avgs.append(None)
     return avgs
 
 
@@ -330,12 +363,15 @@ def create_map(
                 print(f"Warning: track '{track.get('name')}' has no points in "
                       f"[{start_time}, {end_time}]; skipping.")
                 continue
-            seg_speeds = calculate_speeds(points, max_speed)
-            display_seg_speeds = calculate_display_speeds(points, max_speed)
-            distances = accumulate_distances(points)
-            avg_speeds = calculate_average_speeds(points, distances)
-            point_speeds = [0.0] + seg_speeds
-            display_point_speeds = [0.0] + display_seg_speeds
+            edges = edge_metrics(points, max_speed)
+            seg_speeds = calculate_speeds(points, max_speed, _edges=edges)
+            display_seg_speeds = calculate_display_speeds(points, max_speed, _edges=edges)
+            distances = accumulate_distances(points, seg_speeds, _edges=edges)
+            avg_speeds = calculate_average_speeds(points, distances, seg_speeds, _edges=edges)
+            point_speeds = [None] + seg_speeds
+            display_point_speeds = [None] + display_seg_speeds
+            for i, point in enumerate(points):
+                point['valid_from_previous'] = i > 0 and seg_speeds[i - 1] is not None
             all_tracks.append({
                 'name': track['name'],
                 'display_name': display_name,
@@ -348,7 +384,12 @@ def create_map(
                 'display_seg_speeds': display_seg_speeds,
             })
 
-    positive_speeds = [s for track in all_tracks for s in track['display_seg_speeds'] if s > 0]
+    positive_speeds = [
+        speed
+        for track in all_tracks
+        for speed in track['display_seg_speeds']
+        if speed is not None and speed > 0
+    ]
     if positive_speeds:
         max_speed = max(positive_speeds)
 
@@ -370,6 +411,8 @@ def create_map(
 
         track_layer = folium.FeatureGroup(name=f"<span style='color:{color};'>&#9679;</span> {escaped_name}", show=True)
         for j in range(len(lat_lon) - 1):
+            if speeds[j] is None:
+                continue
             color = speed_to_color(speeds[j], max_speed)
             tooltip_content = f"Name: {escaped_name}<br>Time: {times[j]} UTC<br>Speed: {speeds[j]:.2f} knots"
             folium.PolyLine(
@@ -514,7 +557,7 @@ def create_playback_map(
     gpx_files: List[str],
     names: Optional[List[str]] = None,
     *,
-    max_speed: float = 12,
+    max_speed: float = DEFAULT_MAX_SPEED_KNOTS,
     title: Optional[str] = None,
     start_time: Optional[dt.datetime] = None,
     end_time: Optional[dt.datetime] = None,
