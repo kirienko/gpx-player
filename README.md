@@ -23,7 +23,10 @@ The player supports two modes.
 #### 1. "Video" mode (`gpx-player`)
 
 Produces an `MP4` or a `GIF` file showing how the situation developed.
-For sailing races, it also calculates the distance covered after the 'start' signal and the current speed.
+For sailing races, it also calculates distance and current speed from the race start.
+Without `--race_start`, each participant's first point is the metrics baseline.
+Before a participant's first point, its marker is hidden; after its last point,
+the marker stays at that final position and its metrics stop changing.
 
 By default, the file is written to the current directory and named after
 `--title` (slugified), so `--title "Race 1"` produces `race-1.mp4`. Without a
@@ -126,7 +129,7 @@ python -m gpx_player.main example-data/track1.gpx example-data/track2.gpx exampl
 | `--output`, `-o` | Explicit output path, overriding the title-based filename. Use `.gif` with `--gif`, or `.mp4` otherwise. |
 | `--start`, `-s` | Start time, all points *before* it are dropped. |
 | `--end`, `-e` | End time, all points *after* it are dropped. |
-| `--race_start`, `-r` | Race start time, used for the "distance since the start signal" readout. |
+| `--race_start`, `-r` | Race start time and distance/speed baseline. Without it, each participant's first point is the baseline. |
 | `--names`, `-n` | Names of the participants (file names are used in the legend otherwise). |
 | `--marks`, `-m` | File with static marks to put onto the map, one coordinate pair per line, see [Marks](#marks). |
 | `--gif`, `-g` | Save as an animated GIF instead of MP4. |
@@ -436,6 +439,9 @@ print(out)
 * **Naive timestamps.** Every `--start` / `--end` / `start_time` / `end_time`
   value must carry a UTC offset. Video mode is strict (`%Y-%m-%dT%H:%M:%S%z`,
   no `Z`); map mode accepts general ISO 8601, including `Z`.
+* **Video GPX timestamps.** Video mode requires timezone-aware point timestamps
+  in strictly increasing order within each input file. Missing, naive, duplicate
+  or decreasing timestamps are reported before rendering.
 * **`max_speed` silently zeroes fast segments.** It is a plausibility filter,
   not a display cap. The default of `12` knots is tuned for sailing; for
   cycling, driving or running, raise it, or your fastest segments will be
