@@ -624,6 +624,14 @@ ${sliderSelector}::-moz-range-thumb {
         const endTime = times[endIndex];
         const startPoint = track[startIndex];
         const endPoint = track[endIndex];
+        if (!isUsableTrackTransition(track, startIndex)) {
+            const point = currentTimeMs >= endTime ? endPoint : startPoint;
+            return {
+                lat: point.lat,
+                lon: point.lon,
+                heading: movementHeadingForSegment(track, times, startIndex, fallbackHeading || 0),
+            };
+        }
         if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
             return {
                 lat: startPoint.lat,
@@ -667,13 +675,13 @@ ${sliderSelector}::-moz-range-thumb {
             return fallbackHeading || 0;
         }
         for (let i = pointIndex - 1; i >= 0; i--) {
-            if (hasMovement(track[i], point)) {
-                return headingBetween(track[i], point);
+            if (isUsableHeadingSegment(track, null, i)) {
+                return headingBetween(track[i], track[i + 1]);
             }
         }
-        for (let i = pointIndex + 1; i < track.length; i++) {
-            if (hasMovement(point, track[i])) {
-                return headingBetween(point, track[i]);
+        for (let i = pointIndex; i < track.length - 1; i++) {
+            if (isUsableHeadingSegment(track, null, i)) {
+                return headingBetween(track[i], track[i + 1]);
             }
         }
         return fallbackHeading || 0;
@@ -689,7 +697,7 @@ ${sliderSelector}::-moz-range-thumb {
     function isUsableHeadingSegment(track, times, segmentIndex) {
         const fromPoint = track[segmentIndex];
         const toPoint = track[segmentIndex + 1];
-        if (!hasMovement(fromPoint, toPoint)) {
+        if (!hasMovement(fromPoint, toPoint) || !isUsableTrackTransition(track, segmentIndex)) {
             return false;
         }
         if (!times || segmentIndex < 0 || segmentIndex + 1 >= times.length) {
@@ -698,6 +706,20 @@ ${sliderSelector}::-moz-range-thumb {
         return Number.isFinite(times[segmentIndex])
             && Number.isFinite(times[segmentIndex + 1])
             && times[segmentIndex + 1] > times[segmentIndex];
+    }
+
+    function isUsableTrackTransition(track, segmentIndex) {
+        const fromPoint = track[segmentIndex];
+        const toPoint = track[segmentIndex + 1];
+        if (!fromPoint || !toPoint) {
+            return false;
+        }
+        const hasSegmentIndexes = fromPoint.segment_index !== undefined
+            || toPoint.segment_index !== undefined;
+        if (hasSegmentIndexes && fromPoint.segment_index !== toPoint.segment_index) {
+            return false;
+        }
+        return toPoint.valid_from_previous !== false;
     }
 
     function isUsableTimeSegment(times, segmentIndex) {
@@ -729,7 +751,7 @@ ${sliderSelector}::-moz-range-thumb {
         const pointIndex = state.currentPointIndexes[trackIndex] || 0;
         const segmentIndex = state.currentSegmentIndexes[trackIndex] || 0;
         const tailPointCount = Math.max(1, parseInt(state.tailPointCount, 10) || 60);
-        const startIndex = Math.max(0, pointIndex - tailPointCount + 1);
+        const startIndex = tailStartIndex(track, pointIndex, tailPointCount);
         const latlngs = track.slice(startIndex, pointIndex + 1).map((point) => [point.lat, point.lon]);
         const livePosition = trackPositionAtTime(
             track,
@@ -746,6 +768,15 @@ ${sliderSelector}::-moz-range-thumb {
         return latlngs;
     }
 
+    function tailStartIndex(track, pointIndex, tailPointCount) {
+        const minimumIndex = Math.max(0, pointIndex - tailPointCount + 1);
+        let startIndex = pointIndex;
+        while (startIndex > minimumIndex && isUsableTrackTransition(track, startIndex - 1)) {
+            startIndex--;
+        }
+        return startIndex;
+    }
+
     function updateTailStrokeLayer(state, trackIndex, latlngs) {
         const map = state.map;
         const tailStrokeLayer = state.tailStrokeLayers[trackIndex];
@@ -760,9 +791,10 @@ ${sliderSelector}::-moz-range-thumb {
 
     function updateTailCoreLayersForTrack(state, trackIndex, latlngs) {
         const map = state.map;
-        const startIndex = Math.max(
-            0,
-            (state.currentPointIndexes[trackIndex] || 0) - (Math.max(1, parseInt(state.tailPointCount, 10) || 60) - 1)
+        const startIndex = tailStartIndex(
+            state.points[trackIndex],
+            state.currentPointIndexes[trackIndex] || 0,
+            Math.max(1, parseInt(state.tailPointCount, 10) || 60)
         );
         const segmentColors = (state.segmentColors && state.segmentColors[trackIndex]) || [];
         const coreLayers = state.tailCoreLayers[trackIndex] || [];
@@ -832,9 +864,13 @@ ${sliderSelector}::-moz-range-thumb {
             const avgs = state.avgSpeeds[idx];
             const pointIndex = state.currentPointIndexes[idx] || 0;
             entry.querySelector('.distance').textContent = `${dists[pointIndex].toFixed(1)} nm`;
-            entry.querySelector('.speed').textContent = `${speeds[pointIndex].toFixed(1)} kt`;
-            entry.querySelector('.avg-speed').textContent = `${avgs[pointIndex].toFixed(1)} kt`;
+            entry.querySelector('.speed').textContent = metricText(speeds[pointIndex], 1, ' kt');
+            entry.querySelector('.avg-speed').textContent = metricText(avgs[pointIndex], 1, ' kt');
         });
+    }
+
+    function metricText(value, digits, suffix) {
+        return Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : `—${suffix}`;
     }
 
     function setTrackMode(state, trackIndex, mode) {

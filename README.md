@@ -178,9 +178,15 @@ Video-mode options that do **not** exist in map mode: `--race_start`,
 
 > **About `--max-speed`.** It is a dirty-data filter, not a display cap: any
 > segment whose computed speed exceeds it is treated as a GPS glitch and
-> recorded as `0` knots. The colour scale is then rescaled to the highest speed
-> that actually survived the filter. Set it above the fastest speed you expect,
-> otherwise your quickest segments will silently be flattened to zero.
+> excluded from distance, average-speed and smoothing calculations, and is shown
+> as unavailable rather than as a measured stop. Lines and playback tails also
+> break at the rejected point. The colour scale is rescaled to the highest speed
+> that survived the filter. Set it above the fastest speed you expect so valid
+> movement is not discarded.
+>
+> Average speed uses elapsed time only across accepted adjacent points in the
+> same recorded segment. It excludes recording gaps and rejected jumps; valid
+> stationary intervals count as elapsed time.
 
 ### Python API
 
