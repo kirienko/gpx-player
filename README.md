@@ -426,6 +426,7 @@ print(out)
 | `python -m gpx_player.openseamap --files FILES...` | CLI | `--files` is required | `boat_tracks.html` in the CWD (always this name) |
 | `gpx-validate FILE` | CLI | one GPX path | exit `0` valid / `1` invalid |
 | `python -m gpx_player.clean_gpx FILE` | CLI | one GPX path | `FILE_noext.gpx`, or in place with `--overwrite` |
+| `gpx_utils.cut_gpx_file(...)` | API | GPX path, timezone-aware timestamp, `start` or `end` | sibling `_cut` GPX; existing output raises `FileExistsError` |
 | `openseamap.create_playback_map(...)` | API | list of paths | `folium.Map`, caller chooses the path |
 | `openseamap.create_map(...)` | API | list of paths | `(folium.Map, tracks, max_speed, map_id)` |
 | `validator.validate_gpx(...)` | API | one path | `True`, or raises `GPXValidationError` (also `SystemExit` on a bad `version`, see below) |
@@ -444,6 +445,12 @@ print(out)
   input track has no selected points. In map mode, empty tracks are skipped with a
   warning; if *all* tracks are empty the map CLI prints a message and writes
   nothing. Check that the output file exists rather than assuming it does.
+* **GPX cut output.** `cut_gpx_file` includes the cut boundary, omits points
+  without timestamps, requires timezone-aware timestamps, and preserves empty
+  tracks and segments with their metadata. It writes beside the source using
+  `<stem>_cut<suffix>` (or `.gpx`
+  for an extensionless source) and raises `FileExistsError` if that destination
+  already exists; it has no overwrite option.
 * **Headless rendering.** Video mode uses matplotlib; set `MPLBACKEND=Agg` in
   the environment. MP4 output additionally requires `ffmpeg` on `PATH`: without
   it the run renders every frame and *then* dies with `ValueError: unknown file
