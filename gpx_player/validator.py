@@ -1,8 +1,17 @@
 import argparse
+import math
+import re
 import sys
 from datetime import datetime as dt
 
 from lxml import etree
+
+
+_GPX_NAMESPACES = {
+    "http://www.topografix.com/GPX/1/0",
+    "http://www.topografix.com/GPX/1/1",
+}
+
 
 class GPXValidationError(Exception):
     """Exception raised for GPX validation errors."""
@@ -57,6 +66,10 @@ def validate_coordinates(root):
             lon_val = float(lon)
         except (TypeError, ValueError):
             raise GPXValidationError(f"Invalid coordinate values: lat={lat}, lon={lon}")
+        if not math.isfinite(lat_val):
+            raise GPXValidationError(f"Latitude {lat_val} must be finite")
+        if not math.isfinite(lon_val):
+            raise GPXValidationError(f"Longitude {lon_val} must be finite")
         if not (-90 <= lat_val <= 90):
             raise GPXValidationError(f"Latitude {lat_val} out of range (-90, 90)")
         if not (-180 <= lon_val <= 180):
@@ -72,13 +85,55 @@ def validate_elevations(root):
                 ele_val = float(ele_elem.text)
             except ValueError:
                 raise GPXValidationError(f"Invalid elevation value: {ele_elem.text}")
+            if not math.isfinite(ele_val):
+                raise GPXValidationError(f"Invalid elevation value: {ele_elem.text}")
+
+
+def _is_gpx_numeric_precision_error(error, tree):
+    if (
+        error.domain_name != "SCHEMASV"
+        or error.type_name != "SCHEMAV_CVC_FRACTIONDIGITS_VALID"
+        or not error.path
+    ):
+        return False
+
+    try:
+        nodes = tree.xpath(error.path)
+    except etree.XPathError:
+        return False
+    if len(nodes) != 1 or not isinstance(nodes[0], etree._Element):
+        return False
+
+    node = nodes[0]
+    node_name = etree.QName(node)
+    if node_name.namespace not in _GPX_NAMESPACES:
+        return False
+
+    if node_name.localname == "ele":
+        parent = node.getparent()
+        return (
+            parent is not None
+            and etree.QName(parent).namespace == node_name.namespace
+            and etree.QName(parent).localname == "trkpt"
+            and error.message.startswith(f"Element '{node.tag}':")
+        )
+
+    if node_name.localname != "trkpt":
+        return False
+
+    match = re.match(r"^Element '([^']+)', attribute '(lat|lon)':", error.message)
+    return (
+        match is not None
+        and match.group(1) == node.tag
+        and node.get(match.group(2)) is not None
+    )
 
 
 def validate_schema(tree, schema, strict, root=None):
     """
     Validate the XML tree against the provided schema.
-    In default (lenient) mode, if errors are solely due to extra precision on coordinates,
-    perform a manual coordinate check.
+    In default (lenient) mode, bypass only fraction-digit errors on GPX trackpoint
+    coordinates or elevation, then perform manual numeric checks.
     In strict mode, any schema violation will result in an error.
     """
     if schema.validate(tree):
@@ -90,25 +145,26 @@ def validate_schema(tree, schema, strict, root=None):
                                   f"The first {min(10, len(schema.error_log))} errors (out of {len(schema.error_log)}) are:\n"
                                   f"{error_messages}")
 
-    # Lenient mode: check if errors are exclusively about lat/lon or elevation precision
+    # Lenient mode bypasses only recognized latitude, longitude, or elevation precision errors.
+    rejected_errors = [
+        error
+        for error in schema.error_log
+        if not _is_gpx_numeric_precision_error(error, tree)
+    ]
 
-    # Define allowed keywords for lenient errors: latitude, longitude, and elevation.
-    allowed_keywords = ["latitudeType", "longitudeType", "ele"]
-
-    # Filter out errors that are solely about these issues.
-    error_log = [e.message for e in schema.error_log]
-    filtered_errors = [msg for msg in error_log if not any(keyword in msg for keyword in allowed_keywords)]
-
-    if len(filtered_errors) == 0:
-        # Run manual coordinate validation
+    if not rejected_errors:
+        # Run manual coordinate validation.
         validate_coordinates(root)
         validate_elevations(root)
-        print("Warning: GPX file does not strictly conform to the schema (coordinate precision issues), "
-              "but manual checks passed in lenient mode.")
+        print(
+            "Warning: GPX file does not strictly conform to the schema "
+            "(coordinate/elevation precision issues), "
+            "but manual checks passed in lenient mode."
+        )
     else:
-        error_messages = "\n".join(f"  {error}" for error in filtered_errors[:10])
-        raise GPXValidationError(f"XML does not conform to the GPX schema ({len(filtered_errors)} errors):\n"
-                                  f"The first {min(10, len(filtered_errors))} errors (out of {len(filtered_errors)}) are:\n"
+        error_messages = "\n".join(f"  {error.message}" for error in rejected_errors[:10])
+        raise GPXValidationError(f"XML does not conform to the GPX schema ({len(rejected_errors)} errors):\n"
+                                  f"The first {min(10, len(rejected_errors))} errors (out of {len(rejected_errors)}) are:\n"
                                   f"{error_messages}")
 
 
