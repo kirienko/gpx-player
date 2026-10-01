@@ -263,6 +263,37 @@ def test_cut_gpx_file_uses_inclusive_instants_and_preserves_metadata(
     assert '<v:document>preserve</v:document>' in output_xml
 
 
+def test_cut_gpx_file_recomputes_bounds_from_retained_contents(tmp_path):
+    source = tmp_path / 'track.gpx'
+    source.write_text(
+        '<?xml version="1.0"?><gpx version="1.1" creator="cut-test" '
+        'xmlns="http://www.topografix.com/GPX/1/1">'
+        '<metadata><bounds minlat="-20" minlon="-30" maxlat="5" maxlon="12"/>'
+        '</metadata>'
+        '<wpt lat="2" lon="-10"/><rte><rtept lat="5" lon="12"/></rte>'
+        '<trk><trkseg>'
+        '<trkpt lat="-20" lon="-30"><time>2024-01-01T00:00:00Z</time></trkpt>'
+        '<trkpt lat="3" lon="4"><time>2024-01-02T00:00:00Z</time></trkpt>'
+        '</trkseg></trk></gpx>',
+        encoding='utf-8',
+    )
+
+    output = cut_gpx_file(
+        source,
+        dt.datetime(2024, 1, 2, tzinfo=dt.timezone.utc),
+        'start',
+    )
+
+    result = _parse_cut_gpx(Path(output))
+    bounds = result.bounds
+    assert (
+        bounds.min_latitude,
+        bounds.max_latitude,
+        bounds.min_longitude,
+        bounds.max_longitude,
+    ) == (2.0, 5.0, -10.0, 12.0)
+
+
 def test_cut_gpx_file_accepts_compact_timezone_offset_on_python_310(tmp_path, monkeypatch):
     import gpx_player.gpx_utils as gpx_utils
 

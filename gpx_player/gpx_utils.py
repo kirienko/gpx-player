@@ -1,8 +1,10 @@
 import copy
 from datetime import datetime
+from itertools import chain
 from pathlib import Path
 
 import gpxpy
+from gpxpy.gpx import GPXBounds
 from lxml import etree as ET
 
 
@@ -57,6 +59,35 @@ def cut_gpx_file(file_path, timestamp, cut_type):
                 ):
                     retained_points.append(point)
             segment.points = retained_points
+
+    points = chain(
+        new_gpx.waypoints,
+        *(route.points for route in new_gpx.routes),
+        *(
+            segment.points
+            for track in new_gpx.tracks
+            for segment in track.segments
+        ),
+    )
+    min_latitude = max_latitude = min_longitude = max_longitude = None
+    for point in points:
+        latitude = point.latitude
+        longitude = point.longitude
+        if latitude is None or longitude is None:
+            continue
+        if min_latitude is None:
+            min_latitude = max_latitude = latitude
+            min_longitude = max_longitude = longitude
+        else:
+            min_latitude = min(min_latitude, latitude)
+            max_latitude = max(max_latitude, latitude)
+            min_longitude = min(min_longitude, longitude)
+            max_longitude = max(max_longitude, longitude)
+    new_gpx.bounds = (
+        GPXBounds(min_latitude, max_latitude, min_longitude, max_longitude)
+        if min_latitude is not None
+        else None
+    )
 
     output_suffix = source_path.suffix or '.gpx'
     output_path = source_path.with_name(f'{source_path.stem}_cut{output_suffix}')
