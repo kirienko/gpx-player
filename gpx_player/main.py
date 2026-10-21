@@ -20,8 +20,11 @@ def _frame_metrics(points, baseline):
     speed_knots = 0.0
 
     for index in range(1, len(points)):
-        lat1, lon1, time1 = points[index - 1]
-        lat2, lon2, time2 = points[index]
+        lat1, lon1, time1, segment1 = points[index - 1]
+        lat2, lon2, time2, segment2 = points[index]
+        if segment1 != segment2:
+            distances[index] = distance_nm
+            continue
         elapsed_seconds = (time2 - time1).total_seconds()
         if elapsed_seconds > 0 and time2 > baseline:
             segment_km = gpxpy.geo.haversine_distance(lat1, lon1, lat2, lon2) / 1000
@@ -67,21 +70,23 @@ def main(argv=None):
         with open(filename, 'r') as gpx_file:
             gpx = gpxpy.parse(gpx_file)
         points = []
+        segment_index = 0
         for track in gpx.tracks:
             for segment in track.segments:
                 for point in segment.points:
                     if point.time is None or point.time.tzinfo is None or point.time.utcoffset() is None:
                         parser.error(f'GPX point timestamps must be timezone-aware: {filename}')
-                    points.append((point.latitude, point.longitude, point.time.astimezone(local_tz)))
+                    points.append((point.latitude, point.longitude, point.time.astimezone(local_tz), segment_index))
+                segment_index += 1
         for previous, current in zip(points, points[1:]):
             if current[2] == previous[2]:
                 parser.error(f'Duplicate timestamps in {filename}: {current[2].isoformat()}')
             if current[2] < previous[2]:
                 parser.error(f'Decreasing timestamps in {filename}: {current[2].isoformat()}')
         if start_time:
-            points = [(lat, lon, time) for (lat, lon, time) in points if time >= start_time]
+            points = [point for point in points if point[2] >= start_time]
         if end_time:
-            points = [(lat, lon, time) for (lat, lon, time) in points if time <= end_time]
+            points = [point for point in points if point[2] <= end_time]
         if not points:
             parser.error(f'No points in the selected window: {filename}')
         points_list.append(points)

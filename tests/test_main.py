@@ -52,6 +52,22 @@ def write_track(path, points):
     return str(path)
 
 
+def write_segmented_track(path, segments):
+    segments_xml = ''.join(
+        '<trkseg>' + ''.join(
+            f'<trkpt lat="{lat}" lon="{lon}"><time>{timestamp}</time></trkpt>'
+            for lat, lon, timestamp in segment
+        ) + '</trkseg>'
+        for segment in segments
+    )
+    path.write_text(
+        '<gpx version="1.1" creator="tests" xmlns="http://www.topografix.com/GPX/1/1">'
+        f'<trk>{segments_xml}</trk></gpx>',
+        encoding='utf-8',
+    )
+    return str(path)
+
+
 @pytest.fixture
 def staggered_tracks(tmp_path):
     start = dt.datetime.fromisoformat('2023-07-01T11:00:00+00:00')
@@ -195,6 +211,39 @@ def test_race_start_is_the_video_metrics_baseline(monkeypatch, tmp_path, stagger
     assert without_baseline['distances'][0] == f'{full_leg_nm:.2f} nm'
     assert snapshot['speeds'][0] == without_baseline['speeds'][0]
     assert snapshot['time'] == 'Time of the race: 00:30'
+
+
+def test_video_metrics_do_not_bridge_track_segments(monkeypatch, tmp_path):
+    start = dt.datetime.fromisoformat('2023-07-01T11:00:00+00:00')
+
+    def point(minutes, lat, lon):
+        time = start + dt.timedelta(minutes=minutes)
+        return lat, lon, time.isoformat().replace('+00:00', 'Z')
+
+    segmented = write_segmented_track(tmp_path / 'segmented.gpx', [
+        [point(0, 53.5, 9.8), point(1, 53.5, 9.801)],
+        [point(60, 54.5, 10.8), point(61, 54.5, 10.801)],
+    ])
+    frames = [
+        start + dt.timedelta(minutes=1),
+        start + dt.timedelta(minutes=60),
+        start + dt.timedelta(minutes=61),
+    ]
+
+    snapshots = run_frame_callbacks(monkeypatch, tmp_path, [segmented], frames)
+
+    first_leg_nm = gpxpy.geo.haversine_distance(53.5, 9.8, 53.5, 9.801) / 1000 / 1.852
+    second_leg_nm = gpxpy.geo.haversine_distance(54.5, 10.8, 54.5, 10.801) / 1000 / 1.852
+    assert [snapshot['distances'][0] for snapshot in snapshots] == [
+        f'{first_leg_nm:.2f} nm',
+        f'{first_leg_nm:.2f} nm',
+        f'{first_leg_nm + second_leg_nm:.2f} nm',
+    ]
+    assert [snapshot['speeds'][0] for snapshot in snapshots] == [
+        f'{first_leg_nm * 60:.1f} kt',
+        '0.0 kt',
+        f'{second_leg_nm * 60:.1f} kt',
+    ]
 
 
 @pytest.mark.parametrize(('timestamps', 'description'), [
