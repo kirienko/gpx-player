@@ -1,6 +1,6 @@
 import argparse
 import datetime as dt
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from math import atan2, degrees
 
 import gpxpy
@@ -12,7 +12,7 @@ from matplotlib.ticker import FuncFormatter, MultipleLocator
 from gpx_player.utils import format_func, gen_arrow_head_marker, km_to_nm, slug, timedelta_to_hms
 
 
-def _frame_metrics(points, baseline):
+def _frame_metrics(points, baseline, selected_points=None):
     times = [point[2] for point in points]
     distances = [0.0] * len(points)
     speeds = [0.0] * len(points)
@@ -38,6 +38,13 @@ def _frame_metrics(points, baseline):
         distances[index] = distance_nm
         speeds[index] = speed_knots
 
+    if selected_points is not None:
+        selected_indices = [bisect_left(times, point[2]) for point in selected_points]
+        return (
+            [times[index] for index in selected_indices],
+            [distances[index] for index in selected_indices],
+            [speeds[index] for index in selected_indices],
+        )
     return times, distances, speeds
 
 
@@ -64,6 +71,7 @@ def main(argv=None):
     race_start = args.race_start.astimezone(local_tz) if args.race_start else None
 
     points_list = []
+    metric_points_list = []
 
     # Parse the GPX files
     for filename in args.files:
@@ -83,6 +91,7 @@ def main(argv=None):
                 parser.error(f'Duplicate timestamps in {filename}: {current[2].isoformat()}')
             if current[2] < previous[2]:
                 parser.error(f'Decreasing timestamps in {filename}: {current[2].isoformat()}')
+        metric_points = points
         if start_time:
             points = [point for point in points if point[2] >= start_time]
         if end_time:
@@ -90,6 +99,7 @@ def main(argv=None):
         if not points:
             parser.error(f'No points in the selected window: {filename}')
         points_list.append(points)
+        metric_points_list.append(metric_points)
 
     title = args.title if args.title else ''
 
@@ -144,8 +154,8 @@ def main(argv=None):
         ax_dist = [ax.text(0.83, 0.95 - 0.03*i, '', fontsize=7, transform=ax.transAxes) for i in range(len(points_list))]
         ax_speed = [ax.text(0.93, 0.95 - 0.03*i, '', fontsize=7, transform=ax.transAxes) for i in range(len(points_list))]
         track_metrics = [
-            _frame_metrics(points, race_start or points[0][2])
-            for points in points_list
+            _frame_metrics(metric_points, race_start or points[0][2], points)
+            for points, metric_points in zip(points_list, metric_points_list)
         ]
 
         # Update function for animation

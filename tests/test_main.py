@@ -246,6 +246,29 @@ def test_video_metrics_do_not_bridge_track_segments(monkeypatch, tmp_path):
     ]
 
 
+def test_race_metrics_include_points_before_video_start(monkeypatch, tmp_path, staggered_tracks):
+    start, early, _ = staggered_tracks
+    race_start = start + dt.timedelta(seconds=30)
+    video_start = start + dt.timedelta(minutes=1)
+    video_end = start + dt.timedelta(minutes=2)
+
+    snapshots = run_frame_callbacks(
+        monkeypatch, tmp_path, [early], [video_start, video_end],
+        '--start', video_start.strftime('%Y-%m-%dT%H:%M:%S%z'),
+        '--race_start', race_start.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    )
+
+    full_leg_nm = gpxpy.geo.haversine_distance(53.5, 9.8, 53.5, 9.801) / 1000 / 1.852
+    assert [snapshot['distances'][0] for snapshot in snapshots] == [
+        f'{full_leg_nm / 2:.2f} nm',
+        f'{full_leg_nm * 1.5:.2f} nm',
+    ]
+    assert [snapshot['speeds'][0] for snapshot in snapshots] == [
+        f'{full_leg_nm * 60:.1f} kt',
+        f'{full_leg_nm * 60:.1f} kt',
+    ]
+
+
 @pytest.mark.parametrize(('timestamps', 'description'), [
     (['2023-07-01T11:00:00Z', '2023-07-01T11:00:00Z'], 'duplicate'),
     (['2023-07-01T11:00:01Z', '2023-07-01T11:00:00Z'], 'decreasing'),
